@@ -1,0 +1,10 @@
+﻿# Model weights and large binaries
+*.onnx
+*.pth
+*.ckpt
+*.bin
+*.pt
+*.zip
+models/
+pretrained_models/
+__pycache__/
