@@ -10,8 +10,10 @@ fire test requests against each RunPod worker.
 3. npm install
 4. npm run dev  (http://localhost:5173)
 
-Create a .env file (already provided for prod builds) to override the API base:
+Create a .env file (already provided for prod builds) to override the API base and wire up Supabase:
 VITE_API_BASE_URL=https://api.lipdiffusion.uk
+VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
+VITE_SUPABASE_ANON_KEY=<supabase anon key>
 
 ## Deploy
 Push commits to main (GitHub -> Cloudflare Pages). Build command: npm run build, output: dist.

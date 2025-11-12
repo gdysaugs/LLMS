@@ -63,7 +63,8 @@ h1 {
 }
 
 .field select,
-.field textarea {
+.field textarea,
+.field input {
   width: 100%;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -77,6 +78,11 @@ h1 {
 
 .field textarea {
   line-height: 1.4;
+}
+
+.field input {
+  font-family: inherit;
+  resize: none;
 }
 
 small {
@@ -137,6 +143,11 @@ button:not(:disabled):hover {
   color: #84ffce;
 }
 
+.status-warning {
+  border-color: #f2c98e;
+  color: #f2c98e;
+}
+
 .status-error {
   border-color: #ff8a8a;
   color: #ff8a8a;
@@ -166,4 +177,45 @@ button:not(:disabled):hover {
 
 .tips li + li {
   margin-top: 0.4rem;
+}
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-signed-in {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.button-secondary {
+  background: transparent;
+  color: #d7daff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.button-secondary:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.auth-warning {
+  margin: 0.5rem 0;
+  color: #f2c98e;
+  font-weight: 600;
 }
