@@ -1,7 +1,7 @@
 # lipdiffusion frontend
 
-Cloudflare Pages UI that talks to the Worker gateway (https://api.lipdiffusion.uk) and lets you
-fire test requests against each RunPod worker.
+Cloudflare Pages landing page for lipdiffusion.uk.  
+Handles Supabase-based sign-up/sign-in and links users to the Gradio studio once authenticated.
 
 ## Quick start
 
@@ -10,15 +10,16 @@ fire test requests against each RunPod worker.
 3. npm install
 4. npm run dev  (http://localhost:5173)
 
-Create a .env file (already provided for prod builds) to override the API base and wire up Supabase:
+Create a .env file (already provided for prod builds) to wire up the environment:
 VITE_API_BASE_URL=https://api.lipdiffusion.uk
 VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
 VITE_SUPABASE_ANON_KEY=<supabase anon key>
+VITE_APP_URL=https://app.lipdiffusion.uk
 
 ## Deploy
 Push commits to main (GitHub -> Cloudflare Pages). Build command: npm run build, output: dist.
 
 ## Notes
-- Update DEFAULT_PAYLOADS inside src/App.tsx whenever RunPod payload schemas change.
-- Extend styling/sections as needed – this project is only a lightweight launchpad.
-- CORS is handled by the Worker; localhost and app.lipdiffusion.uk are already allowed.
+- Supabase Auth UI is bundled directly in `src/App.tsx`.
+- The Gradio studio URL is controlled via `VITE_APP_URL`.
+- Contact CTA currently points to `hello@lipdiffusion.uk` – adjust as needed.
