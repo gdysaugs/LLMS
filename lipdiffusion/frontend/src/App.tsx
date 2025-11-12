@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
 const APP_URL = import.meta.env.VITE_APP_URL ?? 'https://app.lipdiffusion.uk'
+
+type HistoryItem = {
+  output_url: string
+  created_at: string
+}
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -13,6 +18,11 @@ function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [authMessage, setAuthMessage] = useState('')
+  const [history, setHistory] = useState<HistoryItem[]>([])
+  const [historyStatus, setHistoryStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  )
+  const [historyMessage, setHistoryMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) return
@@ -33,6 +43,51 @@ function App() {
       subscription.unsubscribe()
     }
   }, [])
+
+  const fetchHistory = useCallback(
+    async (activeSession: Session | null) => {
+      if (!supabase || !activeSession?.user?.email) {
+        setHistory([])
+        setHistoryStatus('idle')
+        setHistoryMessage('')
+        return
+      }
+
+      setHistoryStatus('loading')
+      setHistoryMessage('')
+
+      try {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const { data, error } = await supabase
+          .from('generation_history')
+          .select('output_url, created_at')
+          .eq('email', activeSession.user.email)
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+        setHistory(data ?? [])
+        setHistoryStatus('success')
+      } catch (error) {
+        setHistory([])
+        setHistoryStatus('error')
+        setHistoryMessage(
+          error instanceof Error ? error.message : '履歴を取得できませんでした。',
+        )
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (session?.user?.email) {
+      fetchHistory(session)
+    } else {
+      setHistory([])
+      setHistoryStatus('idle')
+      setHistoryMessage('')
+    }
+  }, [session, fetchHistory])
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -75,6 +130,14 @@ function App() {
   const handleSignOut = async () => {
     if (!supabase) return
     await supabase.auth.signOut()
+  }
+
+  const handleHistoryDownload = (url: string) => {
+    if (!url) return
+    const confirmed = window.confirm('この動画をダウンロードしますか？')
+    if (confirmed) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 
   const isAuthenticated = Boolean(session?.access_token)
@@ -180,6 +243,47 @@ function App() {
               <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>
             )}
           </form>
+        )}
+      </section>
+
+      <section className="panel history-panel">
+        <div className="panel-header">
+          <h2>最新生成履歴（24時間）</h2>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={!isAuthenticated || historyStatus === 'loading'}
+            onClick={() => fetchHistory(session)}
+          >
+            更新
+          </button>
+        </div>
+
+        {!isAuthenticated ? (
+          <p className="muted">ログインすると直近24時間の生成URLが表示されます。</p>
+        ) : historyStatus === 'loading' ? (
+          <p className="muted">読み込み中...</p>
+        ) : historyStatus === 'error' ? (
+          <p className="error">{historyMessage}</p>
+        ) : history.length === 0 ? (
+          <p className="muted">過去24時間の生成履歴はありません。</p>
+        ) : (
+          <ul className="history-list">
+            {history.map((item) => (
+              <li key={`${item.created_at}-${item.output_url}`}>
+                <button
+                  type="button"
+                  className="history-link"
+                  onClick={() => handleHistoryDownload(item.output_url)}
+                >
+                  {item.output_url}
+                </button>
+                <span className="history-time">
+                  {new Date(item.created_at).toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

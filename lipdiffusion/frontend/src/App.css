@@ -218,3 +218,36 @@ button:not(:disabled):hover {
 .highlights li + li {
   margin-top: 0.25rem;
 }
+
+.history-panel .history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.history-link {
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7daff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.history-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.history-time {
+  display: block;
+  margin-top: 0.25rem;
+  color: #8c93ad;
+  font-size: 0.8rem;
+}

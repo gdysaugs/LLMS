@@ -16,6 +16,19 @@ VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
 VITE_SUPABASE_ANON_KEY=<supabase anon key>
 VITE_APP_URL=https://app.lipdiffusion.uk
 
+### Supabase テーブル
+Gradio 側で生成履歴を記録し、LP から過去24時間の URL を取得できるようにしています。  
+以下のテーブルを Supabase で作成し、RLS で `auth.email() = email` のユーザーのみ参照/追加できるようにしてください。
+
+```sql
+create table public.generation_history (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  output_url text not null,
+  created_at timestamptz not null default now()
+);
+```
+
 ## Deploy
 Push commits to main (GitHub -> Cloudflare Pages). Build command: npm run build, output: dist.
 
