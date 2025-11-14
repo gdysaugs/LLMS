@@ -4,7 +4,8 @@ import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
-const APP_URL = import.meta.env.VITE_APP_URL ?? 'https://app.lipdiffusion.uk'
+const APP_URL =
+  import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui'
 
 type HistoryItem = {
   output_url: string
