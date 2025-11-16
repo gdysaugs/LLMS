@@ -7,9 +7,22 @@ import { isAuthConfigured, supabase } from './lib/supabaseClient'
 const APP_URL =
   import.meta.env.VITE_APP_URL ?? 'https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/'
 
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
+
 type HistoryItem = {
   output_url: string
   created_at: string
+}
+
+type BillingResponse = {
+  email: string
+  tickets: number
+  subscription_status?: string | null
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  current_period_end?: string | null
+  has_active_subscription: boolean
 }
 
 function App() {
@@ -24,6 +37,12 @@ function App() {
     'idle',
   )
   const [historyMessage, setHistoryMessage] = useState('')
+  const [billing, setBilling] = useState<BillingResponse | null>(null)
+  const [billingStatus, setBillingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>(
+    'idle',
+  )
+  const [billingMessage, setBillingMessage] = useState('')
+  const [billingAction, setBillingAction] = useState<'idle' | 'loading'>('idle')
 
   useEffect(() => {
     if (!supabase) return
@@ -80,7 +99,43 @@ function App() {
     [],
   )
 
+  const fetchBillingStatus = useCallback(
+    async (activeSession: Session | null) => {
+      if (!activeSession?.access_token) {
+        setBilling(null)
+        setBillingStatus('idle')
+        setBillingMessage('')
+        return
+      }
+
+      setBillingStatus('loading')
+      setBillingMessage('')
+
+      try {
+        const response = await fetch(API_BASE + '/billing/status', {
+          headers: {
+            Authorization: 'Bearer ' + activeSession.access_token,
+          },
+        })
+        const data = await response.json()
+        if (!response.ok) {
+          throw new Error((data && data.detail) || '課金ステータスを取得できませんでした。')
+        }
+        setBilling(data as BillingResponse)
+        setBillingStatus('success')
+      } catch (error) {
+        setBilling(null)
+        setBillingStatus('error')
+        setBillingMessage(
+          error instanceof Error ? error.message : '課金ステータスを取得できませんでした。',
+        )
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
+    fetchBillingStatus(session)
     if (session?.user?.email) {
       fetchHistory(session)
     } else {
@@ -88,7 +143,7 @@ function App() {
       setHistoryStatus('idle')
       setHistoryMessage('')
     }
-  }, [session, fetchHistory])
+  }, [session, fetchHistory, fetchBillingStatus])
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -138,6 +193,71 @@ function App() {
     const confirmed = window.confirm('この動画をダウンロードしますか？')
     if (confirmed) {
       window.open(url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  const handleStartSubscription = async () => {
+    if (!session?.access_token) {
+      setBillingMessage('サインインしてからサブスクを開始してください。')
+      return
+    }
+    setBillingAction('loading')
+    setBillingMessage('')
+    try {
+      const response = await fetch(API_BASE + '/billing/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + session.access_token,
+        },
+        body: JSON.stringify({
+          success_url: window.location.origin + '?checkout=success',
+          cancel_url: window.location.href,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.url) {
+        throw new Error((data && data.detail) || 'Stripe Checkout を開始できませんでした。')
+      }
+      window.location.assign(data.url as string)
+    } catch (error) {
+      setBillingMessage(
+        error instanceof Error ? error.message : 'Stripe Checkout を開始できませんでした。',
+      )
+    } finally {
+      setBillingAction('idle')
+    }
+  }
+
+  const handleOpenPortal = async () => {
+    if (!session?.access_token) {
+      setBillingMessage('サインインしてから請求情報を管理してください。')
+      return
+    }
+    setBillingAction('loading')
+    setBillingMessage('')
+    try {
+      const response = await fetch(API_BASE + '/billing/portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + session.access_token,
+        },
+        body: JSON.stringify({
+          return_url: window.location.origin + '?portal=return',
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.url) {
+        throw new Error((data && data.detail) || 'Stripe ポータルを開けませんでした。')
+      }
+      window.location.assign(data.url as string)
+    } catch (error) {
+      setBillingMessage(
+        error instanceof Error ? error.message : 'Stripe ポータルを開けませんでした。',
+      )
+    } finally {
+      setBillingAction('idle')
     }
   }
 
@@ -244,6 +364,72 @@ function App() {
               <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>
             )}
           </form>
+        )}
+      </section>
+
+      <section className="panel billing-panel">
+        <div className="panel-header">
+          <h2>サブスク / チケット</h2>
+          <span
+            className={
+              'status ' +
+              (billingStatus === 'error'
+                ? 'status-error'
+                : billing?.has_active_subscription
+                  ? 'status-success'
+                  : 'status-warning')
+            }
+          >
+            {billingStatus === 'loading'
+              ? 'loading'
+              : billing?.has_active_subscription
+                ? 'active'
+                : 'inactive'}
+          </span>
+        </div>
+        {!isAuthenticated ? (
+          <p className="muted">サインインするとチケット残高とサブスク状態を確認できます。</p>
+        ) : billingStatus === 'loading' ? (
+          <p className="muted">読み込み中...</p>
+        ) : billingStatus === 'error' ? (
+          <p className="error">{billingMessage}</p>
+        ) : (
+          <>
+            <ul className="billing-stats">
+              <li>
+                <span className="label">Tickets</span>
+                <strong>{billing?.tickets ?? 0}</strong>
+              </li>
+              <li>
+                <span className="label">Status</span>
+                <strong>{billing?.subscription_status ?? 'inactive'}</strong>
+              </li>
+              {billing?.current_period_end && (
+                <li>
+                  <span className="label">更新予定</span>
+                  <span>{new Date(billing.current_period_end).toLocaleDateString()}</span>
+                </li>
+              )}
+            </ul>
+            <div className="billing-actions">
+              <button
+                type="button"
+                onClick={handleStartSubscription}
+                disabled={!isAuthenticated || billingAction === 'loading'}
+              >
+                Stripe で購読
+              </button>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={handleOpenPortal}
+                disabled={!isAuthenticated || billingAction === 'loading'}
+              >
+                請求情報を管理
+              </button>
+            </div>
+            {billingMessage && <p className="muted">{billingMessage}</p>}
+          </>
         )}
       </section>
 
