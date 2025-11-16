@@ -14,7 +14,7 @@ Create a .env file (already provided for prod builds) to wire up the environment
 VITE_API_BASE_URL=https://api.lipdiffusion.uk
 VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
 VITE_SUPABASE_ANON_KEY=<supabase anon key>
-VITE_APP_URL=https://vqqqcctluttsbs-7860.proxy.runpod.net/
+VITE_APP_URL=https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/
 
 ### Supabase テーブル
 Gradio 側で生成履歴を記録し、LP から過去24時間の URL を取得できるようにしています。  
@@ -28,5 +28,5 @@ Push commits to main (GitHub -> Cloudflare Pages). Build command: npm run build,
 ## Notes
 - Supabase Auth UI is bundled directly in src/App.tsx.
 - The Gradio studio URL is controlled via VITE_APP_URL and should point to the active studio endpoint
-  (https://vqqqcctluttsbs-7860.proxy.runpod.net/).
+  (https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/).
 - Contact CTA currently points to hello@lipdiffusion.uk – adjust as needed.

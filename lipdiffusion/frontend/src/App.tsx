@@ -5,7 +5,7 @@ import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
 const APP_URL =
-  import.meta.env.VITE_APP_URL ?? 'https://vqqqcctluttsbs-7860.proxy.runpod.net/'
+  import.meta.env.VITE_APP_URL ?? 'https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/'
 
 type HistoryItem = {
   output_url: string
