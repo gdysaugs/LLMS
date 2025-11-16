@@ -1,5 +1,7 @@
 export interface Env {
   FASTAPI_BASE_URL: string;
+  FASTAPI_ACCESS_CLIENT_ID?: string;
+  FASTAPI_ACCESS_CLIENT_SECRET?: string;
   RUNPOD_FACEFUSION_URL: string;
   RUNPOD_FACEFUSION_KEY: string;
   RUNPOD_WAV2LIP_URL: string;
@@ -35,9 +37,18 @@ export default {
 
       const upstreamPath = url.pathname.replace(/^\/fastapi/, "") || "/";
       const targetUrl = base + upstreamPath + url.search;
-      const fastapiResponse = await fetch(targetUrl, new Request(targetUrl, request));
+      const headers = new Headers(request.headers);
+      if (env.FASTAPI_ACCESS_CLIENT_ID && env.FASTAPI_ACCESS_CLIENT_SECRET) {
+        headers.set("CF-Access-Client-Id", env.FASTAPI_ACCESS_CLIENT_ID);
+        headers.set("CF-Access-Client-Secret", env.FASTAPI_ACCESS_CLIENT_SECRET);
+      }
+      const fastapiResponse = await fetch(targetUrl, {
+        method: request.method,
+        headers,
+        body: shouldIncludeBody(request.method) ? request.body : null,
+      });
 
-      return withCors(new Response(fastapiResponse.body, fastapiResponse), origin);
+      return withCors(cloneResponse(fastapiResponse), origin);
     }
 
     const runpodTargets: Record<string, { url: string; key: string }> = {
@@ -72,7 +83,7 @@ export default {
         body,
       });
 
-      return withCors(new Response(runpodResponse.body, runpodResponse), origin);
+      return withCors(cloneResponse(runpodResponse), origin);
     }
 
     return withCors(Response.json({ error: "not_found" }, { status: 404 }), origin);
@@ -98,4 +109,17 @@ function withCors(response: Response, origin: string | null) {
     statusText: response.statusText,
     headers,
   });
+}
+
+function cloneResponse(response: Response) {
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+function shouldIncludeBody(method: string) {
+  const upper = method.toUpperCase();
+  return upper !== "GET" && upper !== "HEAD";
 }
