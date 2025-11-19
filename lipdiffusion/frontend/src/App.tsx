@@ -10,6 +10,9 @@ const APP_URL =
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
 
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
+
 type HistoryItem = {
   output_url: string
   created_at: string

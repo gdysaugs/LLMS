@@ -6,6 +6,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "api-gateway",
 	"main": "src/index.ts",
+	"account_id": "511b7840b359d7f544847a3dfad8e85f",
 	"compatibility_date": "2025-11-09",
 	"observability": {
 		"enabled": true

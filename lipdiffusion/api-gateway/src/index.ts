@@ -1,4 +1,7 @@
 export interface Env {
+  FASTAPI_BASE_URL: string;
+  FASTAPI_ACCESS_CLIENT_ID?: string;
+  FASTAPI_ACCESS_CLIENT_SECRET?: string;
   RUNPOD_FACEFUSION_URL: string;
   RUNPOD_FACEFUSION_KEY: string;
   RUNPOD_WAV2LIP_URL: string;
@@ -12,10 +15,40 @@ export interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const origin = request.headers.get("Origin");
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
 
     // ヘルスチェック
     if (url.pathname === "/health") {
-      return Response.json({ status: "ok" });
+      return withCors(Response.json({ status: "ok" }), origin);
+    }
+
+    if (url.pathname.startsWith("/fastapi")) {
+      const base = (env.FASTAPI_BASE_URL || "").replace(/\/$/, "");
+      if (!base) {
+        return withCors(
+          Response.json({ error: "fastapi_not_configured" }, { status: 500 }),
+          origin,
+        );
+      }
+
+      const upstreamPath = url.pathname.replace(/^\/fastapi/, "") || "/";
+      const targetUrl = base + upstreamPath + url.search;
+      const headers = new Headers(request.headers);
+      if (env.FASTAPI_ACCESS_CLIENT_ID && env.FASTAPI_ACCESS_CLIENT_SECRET) {
+        headers.set("CF-Access-Client-Id", env.FASTAPI_ACCESS_CLIENT_ID);
+        headers.set("CF-Access-Client-Secret", env.FASTAPI_ACCESS_CLIENT_SECRET);
+      }
+      const fastapiResponse = await fetch(targetUrl, {
+        method: request.method,
+        headers,
+        body: shouldIncludeBody(request.method) ? request.body : null,
+      });
+
+      return withCors(cloneResponse(fastapiResponse), origin);
     }
 
     const runpodTargets: Record<string, { url: string; key: string }> = {
@@ -50,9 +83,43 @@ export default {
         body,
       });
 
-      return new Response(runpodResponse.body, runpodResponse);
+      return withCors(cloneResponse(runpodResponse), origin);
     }
 
-    return Response.json({ error: "not_found" }, { status: 404 });
+    return withCors(Response.json({ error: "not_found" }, { status: 404 }), origin);
   },
 };
+
+function corsHeaders(origin: string | null) {
+  const headers = new Headers();
+  headers.set("Access-Control-Allow-Origin", origin ?? "*");
+  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Authorization,Content-Type");
+  headers.set("Access-Control-Allow-Credentials", "true");
+  return headers;
+}
+
+function withCors(response: Response, origin: string | null) {
+  const headers = new Headers(response.headers);
+  corsHeaders(origin).forEach((value, key) => {
+    headers.set(key, value);
+  });
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function cloneResponse(response: Response) {
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+function shouldIncludeBody(method: string) {
+  const upper = method.toUpperCase();
+  return upper !== "GET" && upper !== "HEAD";
+}
