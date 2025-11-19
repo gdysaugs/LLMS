@@ -11,10 +11,13 @@ Handles Supabase-based sign-up/sign-in and links users to the Gradio studio once
 4. npm run dev  (http://localhost:5173)
 
 Create a .env file (already provided for prod builds) to wire up the environment:
-VITE_API_BASE_URL=https://api.lipdiffusion.uk
+VITE_API_BASE_URL=https://api-gateway.adamadams567890.workers.dev/fastapi
 VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
 VITE_SUPABASE_ANON_KEY=<supabase anon key>
 VITE_APP_URL=https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/
+
+`VITE_API_BASE_URL` must point at the Cloudflare Worker (`*.workers.dev`) because
+`api.lipdiffusion.uk` itself stays behind Cloudflare Access for FastAPI and will block browser CORS preflights.
 
 ### Supabase テーブル
 Gradio 側で生成履歴を記録し、LP から過去24時間の URL を取得できるようにしています。  
