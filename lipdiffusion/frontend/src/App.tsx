@@ -10,6 +10,52 @@ const APP_URL =
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
 
+/**
+ * Fetch with automatic retry for 502/503 errors (backend starting up)
+ * Implements exponential backoff with jitter
+ */
+async function fetchWithRetry(
+  url: string,
+  options?: RequestInit,
+  maxRetries = 5,
+  baseDelay = 1000
+): Promise<Response> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+
+      // Retry on 502 Bad Gateway or 503 Service Unavailable
+      if ((response.status === 502 || response.status === 503) && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500
+        console.warn(
+          `[fetchWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed with ${response.status}. Retrying in ${Math.round(delay)}ms...`
+        )
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+
+      return response
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500
+        console.warn(
+          `[fetchWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed with network error. Retrying in ${Math.round(delay)}ms...`,
+          error
+        )
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Max retries exceeded')
+}
+
+
 
 
 type HistoryItem = {
@@ -114,7 +160,7 @@ function App() {
       setBillingMessage('')
 
       try {
-        const response = await fetch(API_BASE + '/billing/status', {
+        const response = await fetchWithRetry(API_BASE + '/billing/status', {
           headers: {
             Authorization: 'Bearer ' + activeSession.access_token,
           },
@@ -206,7 +252,7 @@ function App() {
     setBillingAction('loading')
     setBillingMessage('')
     try {
-      const response = await fetch(API_BASE + '/billing/checkout', {
+      const response = await fetchWithRetry(API_BASE + '/billing/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -239,7 +285,7 @@ function App() {
     setBillingAction('loading')
     setBillingMessage('')
     try {
-      const response = await fetch(API_BASE + '/billing/portal', {
+      const response = await fetchWithRetry(API_BASE + '/billing/portal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
