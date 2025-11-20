@@ -5,7 +5,7 @@ import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
 const APP_URL =
-  import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui/'
+  import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui'
 
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
