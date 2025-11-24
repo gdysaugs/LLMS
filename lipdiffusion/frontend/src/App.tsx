@@ -332,7 +332,7 @@ function App() {
             className="primary-link"
             href={isAuthenticated ? `${APP_URL}?email=${encodeURIComponent(userEmail)}` : '#auth'}
             target={isAuthenticated ? '_blank' : undefined}
-            rel={isAuthenticated ? 'noreferrer' : undefined}
+            rel={isAuthenticated ? 'noopener' : undefined}
             onClick={handleStudioClick}
           >
             {isAuthenticated ? 'スタジオを開く' : '無料アカウント作成'}
