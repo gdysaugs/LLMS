@@ -309,6 +309,12 @@ function App() {
     }
   }
 
+  const handleStudioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isAuthenticated || !userEmail) return
+    // Set domain-wide cookie so Gradio UI can access it
+    document.cookie = `user_email=${encodeURIComponent(userEmail)}; domain=.lipdiffusion.uk; path=/; max-age=3600; SameSite=None; Secure`
+  }
+
   const isAuthenticated = Boolean(session?.access_token)
   const userEmail = session?.user?.email ?? ''
 
@@ -327,6 +333,7 @@ function App() {
             href={isAuthenticated ? `${APP_URL}?email=${encodeURIComponent(userEmail)}` : '#auth'}
             target={isAuthenticated ? '_blank' : undefined}
             rel={isAuthenticated ? 'noreferrer' : undefined}
+            onClick={handleStudioClick}
           >
             {isAuthenticated ? 'スタジオを開く' : '無料アカウント作成'}
           </a>
