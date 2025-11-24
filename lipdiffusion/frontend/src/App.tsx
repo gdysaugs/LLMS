@@ -234,6 +234,11 @@ function App() {
   const handleSignOut = async () => {
     if (!supabase) return
     await supabase.auth.signOut()
+
+    // Clear domain-wide cookies so Gradio UI access is revoked
+    const cookieOptions = `domain=.lipdiffusion.uk; path=/; max-age=0; SameSite=None; Secure`
+    document.cookie = `user_email=; ${cookieOptions}`
+    document.cookie = `sb_access_token=; ${cookieOptions}`
   }
 
   const handleHistoryDownload = (url: string) => {
@@ -310,9 +315,12 @@ function App() {
   }
 
   const handleStudioClick = () => {
-    if (!isAuthenticated || !userEmail) return
-    // Set domain-wide cookie so Gradio UI can access it
-    document.cookie = `user_email=${encodeURIComponent(userEmail)}; domain=.lipdiffusion.uk; path=/; max-age=3600; SameSite=None; Secure`
+    if (!isAuthenticated || !userEmail || !session?.access_token) return
+    // Set domain-wide cookies so Gradio UI can access them
+    const maxAge = 3600
+    const cookieOptions = `domain=.lipdiffusion.uk; path=/; max-age=${maxAge}; SameSite=None; Secure`
+    document.cookie = `user_email=${encodeURIComponent(userEmail)}; ${cookieOptions}`
+    document.cookie = `sb_access_token=${session.access_token}; ${cookieOptions}`
   }
 
   const isAuthenticated = Boolean(session?.access_token)
