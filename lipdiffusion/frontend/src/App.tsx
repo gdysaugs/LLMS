@@ -324,7 +324,7 @@ function App() {
         <div className="hero-actions">
           <a
             className="primary-link"
-            href={isAuthenticated ? APP_URL : '#auth'}
+            href={isAuthenticated ? `${APP_URL}?email=${encodeURIComponent(userEmail)}` : '#auth'}
             target={isAuthenticated ? '_blank' : undefined}
             rel={isAuthenticated ? 'noreferrer' : undefined}
           >
