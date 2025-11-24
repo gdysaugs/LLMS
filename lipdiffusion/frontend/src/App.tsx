@@ -309,7 +309,7 @@ function App() {
     }
   }
 
-  const handleStudioClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleStudioClick = () => {
     if (!isAuthenticated || !userEmail) return
     // Set domain-wide cookie so Gradio UI can access it
     document.cookie = `user_email=${encodeURIComponent(userEmail)}; domain=.lipdiffusion.uk; path=/; max-age=3600; SameSite=None; Secure`
