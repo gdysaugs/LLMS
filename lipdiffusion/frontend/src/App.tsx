@@ -73,7 +73,23 @@ type BillingResponse = {
   has_active_subscription: boolean
 }
 
-const FEATURE_CARDS = [
+type FeatureCard = {
+  titleEn: string
+  titleJa: string
+  bodyEn: string
+  bodyJa: string
+  tag: string
+}
+
+type ShowreelClip = {
+  src: string
+  titleEn: string
+  titleJa: string
+  desc?: string
+  audioSrc: string
+}
+
+const FEATURE_CARDS: FeatureCard[] = [
   {
     titleEn: 'Clone your tone',
     titleJa: '声質コピー',
@@ -104,34 +120,26 @@ const FEATURE_CARDS = [
   },
 ]
 
-type ShowreelClip = {
-  src: string
-  titleEn: string
-  titleJa: string
-  desc?: string
-  audioSrc: string
-}
-
 const SHOWREEL_CLIPS: ShowreelClip[] = [
   {
     src: CREATIVE_DEMO,
     titleEn: 'Script + lip-sync (cloned voice sample)',
     titleJa: 'クローン声でセリフを差し替えた例',
-    desc: '1秒の声からクローンし、新しいセリフに合わせて口パクと声を同期。',
+    desc: 'Cloned from a 1-second sample and synced to a new script.',
     audioSrc: VOICE_SRC_MID,
   },
   {
     src: '/media/voice-morph-2.mp4',
     titleEn: 'Voice clone to new language/lines',
     titleJa: '声質コピーで別の言語・台本へ',
-    desc: '短い音声をもとに声色を転写し、別言語でも自然な口の動きで再生。',
+    desc: 'Short voice transferred to a new phrase with natural lip motion.',
     audioSrc: VOICE_SRC_LEFT,
   },
   {
     src: HERO_VIDEO,
-    titleEn: 'Voice cloning for any input / 日英どちらの声でもコピー',
+    titleEn: 'Voice cloning for any input / Works in EN & JA',
     titleJa: 'どんな音声からでも声質コピーし日英対応で仕上げ',
-    desc: 'どの音声でもトーンを合わせ、英日どちらのセリフでも映像を出力。',
+    desc: 'Match tone from any sample and output in English or Japanese.',
     audioSrc: VOICE_SRC_RIGHT,
   },
 ]
@@ -301,7 +309,7 @@ function App() {
   const handleGoogleSignIn = async () => {
     if (!supabase || !isAuthConfigured) {
       setAuthStatus('error')
-      setAuthMessage('Supabase の環境変数が不足しています。')
+      setAuthMessage('Supabase settings are missing / Supabase の設定が不足しています。')
       return
     }
     setAuthStatus('loading')
@@ -316,7 +324,11 @@ function App() {
       if (error) throw error
     } catch (error) {
       setAuthStatus('error')
-      setAuthMessage(error instanceof Error ? error.message : 'Googleログインに失敗しました。')
+      setAuthMessage(
+        error instanceof Error
+          ? error.message
+          : 'Google sign-in failed / Googleログインに失敗しました。',
+      )
     }
   }
 
@@ -325,7 +337,7 @@ function App() {
 
     if (!supabase || !isAuthConfigured) {
       setAuthStatus('error')
-      setAuthMessage('Supabase の環境変数が未設定です。')
+      setAuthMessage('Supabase variables are not set / Supabase の環境変数が未設定です。')
       return
     }
 
@@ -340,7 +352,7 @@ function App() {
         })
         if (error) throw error
         setAuthStatus('success')
-        setAuthMessage('確認メールを送信しました。受信箱を確認してください。')
+        setAuthMessage('Confirmation email sent / 確認メールを送信しました。')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
@@ -348,12 +360,14 @@ function App() {
         })
         if (error) throw error
         setAuthStatus('success')
-        setAuthMessage('サインインしました。')
+        setAuthMessage('Signed in / サインインしました。')
       }
     } catch (error) {
       setAuthStatus('error')
       setAuthMessage(
-        error instanceof Error ? error.message : '認証中に不明なエラーが発生しました。',
+        error instanceof Error
+          ? error.message
+          : 'Auth error occurred / 認証中にエラーが発生しました。',
       )
     }
   }
@@ -369,7 +383,7 @@ function App() {
 
   const handleHistoryDownload = (url: string) => {
     if (!url) return
-    const confirmed = window.confirm('この動画をダウンロードしますか？')
+    const confirmed = window.confirm('Download this video? / この動画をダウンロードしますか？')
     if (confirmed) {
       window.open(url, '_blank', 'noopener,noreferrer')
     }
@@ -377,7 +391,7 @@ function App() {
 
   const handleStartSubscription = async () => {
     if (!session?.access_token) {
-      setBillingMessage('サインインしてからサブスクを開始してください。')
+      setBillingMessage('Sign in first / 先にサインインしてください。')
       return
     }
     setBillingAction('loading')
@@ -396,12 +410,12 @@ function App() {
       })
       const data = await response.json()
       if (!response.ok || !data?.url) {
-        throw new Error((data && data.detail) || 'Stripe Checkout を開始できませんでした。')
+        throw new Error((data && data.detail) || 'Stripe Checkout failed / 開始できませんでした。')
       }
       window.location.assign(data.url as string)
     } catch (error) {
       setBillingMessage(
-        error instanceof Error ? error.message : 'Stripe Checkout を開始できませんでした。',
+        error instanceof Error ? error.message : 'Stripe Checkout failed / 開始できませんでした。',
       )
     } finally {
       setBillingAction('idle')
@@ -410,7 +424,7 @@ function App() {
 
   const handleOpenPortal = async () => {
     if (!session?.access_token) {
-      setBillingMessage('サインインしてから請求情報を管理してください。')
+      setBillingMessage('Sign in first / 先にサインインしてください。')
       return
     }
     setBillingAction('loading')
@@ -428,12 +442,12 @@ function App() {
       })
       const data = await response.json()
       if (!response.ok || !data?.url) {
-        throw new Error((data && data.detail) || 'Stripe ポータルを開けませんでした。')
+        throw new Error((data && data.detail) || 'Stripe portal failed / ポータルを開けません。')
       }
       window.location.assign(data.url as string)
     } catch (error) {
       setBillingMessage(
-        error instanceof Error ? error.message : 'Stripe ポータルを開けませんでした。',
+        error instanceof Error ? error.message : 'Stripe portal failed / ポータルを開けません。',
       )
     } finally {
       setBillingAction('idle')
@@ -479,13 +493,13 @@ function App() {
                 rel={isAuthenticated ? 'noopener' : undefined}
                 onClick={handleStudioClick}
               >
-                {isAuthenticated ? '動画を作成する' : '動画を作成する'}
+                Create video / 動画を作成する
               </a>
               <div className="cta-note">
                 <span className="chip">3 tickets on free sign-up</span>
                 <span className="chip">Browser only ・ No editor needed</span>
                 <span className="chip">For creators & teams</span>
-                <span className="chip">動画と音声だけでOK / 顔写真はオプション合成</span>
+                <span className="chip">Videos + audio only OK / 顔写真はオプション合成</span>
               </div>
             </div>
             {isAuthenticated && (
@@ -544,9 +558,9 @@ function App() {
 
           {!isAuthConfigured ? (
             <p className="error">
-              Supabase の URL / anon key が未設定です。Cloudflare Pages の環境変数に
-              <code>VITE_SUPABASE_URL</code> と <code>VITE_SUPABASE_ANON_KEY</code>
-              を入力してください。
+              Supabase URL / anon key not set. Set <code>VITE_SUPABASE_URL</code> and{' '}
+              <code>VITE_SUPABASE_ANON_KEY</code> in Cloudflare Pages. / Supabase の URL / anon key
+              が未設定です。Cloudflare Pages の環境変数に設定してください。
             </p>
           ) : isAuthenticated ? (
             <div className="auth-signed-in">
@@ -555,7 +569,7 @@ function App() {
               </p>
               <div className="auth-actions">
                 <button type="button" className="button-secondary" onClick={handleSignOut}>
-                  Sign out
+                  Sign out / サインアウト
                 </button>
               </div>
             </div>
@@ -573,7 +587,7 @@ function App() {
               </label>
 
               <label className="field">
-                <span>Password</span>
+                <span>Password / パスワード</span>
                 <input
                   type="password"
                   value={authPassword}
@@ -585,18 +599,18 @@ function App() {
               </label>
 
               <label className="field">
-                <span>Action</span>
+                <span>Action / 操作</span>
                 <select
                   value={authMode}
                   onChange={(e) => setAuthMode(e.target.value as 'signin' | 'signup')}
                 >
-                  <option value="signup">Create account</option>
-                  <option value="signin">Sign in</option>
+                  <option value="signup">Create account / 新規登録</option>
+                  <option value="signin">Sign in / サインイン</option>
                 </select>
               </label>
 
               <button type="submit" disabled={authStatus === 'loading'}>
-                {authMode === 'signup' ? 'Send confirmation email' : 'Sign in'}
+                {authMode === 'signup' ? 'Send confirmation email / 確認メール送信' : 'Sign in / サインイン'}
               </button>
               <button
                 type="button"
@@ -604,7 +618,7 @@ function App() {
                 onClick={handleGoogleSignIn}
                 disabled={authStatus === 'loading'}
               >
-                Sign in with Google
+                Sign in with Google / Googleでサインイン
               </button>
               {authMessage && (
                 <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>
@@ -634,9 +648,11 @@ function App() {
             </span>
           </div>
           {!isAuthenticated ? (
-            <p className="muted">サインインするとチケット残高とサブスク状態を確認できます。</p>
+            <p className="muted">
+              Sign in to see tickets and subscription. / サインインするとチケット残高とサブスク状態を確認できます。
+            </p>
           ) : billingStatus === 'loading' ? (
-            <p className="muted">読み込み中...</p>
+            <p className="muted">Loading... / 読み込み中...</p>
           ) : billingStatus === 'error' ? (
             <p className="error">{billingMessage}</p>
           ) : (
@@ -652,7 +668,7 @@ function App() {
                 </li>
                 {billing?.current_period_end && (
                   <li>
-                    <span className="label">更新予定日</span>
+                    <span className="label">Renewal / 更新予定日</span>
                     <span>{new Date(billing.current_period_end).toLocaleDateString()}</span>
                   </li>
                 )}
@@ -663,7 +679,7 @@ function App() {
                   onClick={handleStartSubscription}
                   disabled={!isAuthenticated || billingAction === 'loading'}
                 >
-                  Stripe で購読
+                  Subscribe with Stripe / Stripe で購読
                 </button>
                 <button
                   type="button"
@@ -671,7 +687,7 @@ function App() {
                   onClick={handleOpenPortal}
                   disabled={!isAuthenticated || billingAction === 'loading'}
                 >
-                  請求情報を管理
+                  Manage billing / 請求情報を管理
                 </button>
               </div>
               {billingMessage && <p className="muted">{billingMessage}</p>}
@@ -688,18 +704,18 @@ function App() {
               disabled={!isAuthenticated || historyStatus === 'loading'}
               onClick={() => fetchHistory(session)}
             >
-              更新
+              Refresh / 更新
             </button>
           </div>
 
           {!isAuthenticated ? (
-            <p className="muted">ログインすると直近24時間の生成URLが表示されます。</p>
+            <p className="muted">Sign in to view recent outputs. / サインインすると直近の生成URLが表示されます。</p>
           ) : historyStatus === 'loading' ? (
-            <p className="muted">読み込み中...</p>
+            <p className="muted">Loading... / 読み込み中...</p>
           ) : historyStatus === 'error' ? (
             <p className="error">{historyMessage}</p>
           ) : history.length === 0 ? (
-            <p className="muted">過去24時間の生成履歴はありません。</p>
+            <p className="muted">No renders in the last 24h. / 過去24時間の生成履歴はありません。</p>
           ) : (
             <ul className="history-list">
               {history.map((item) => (
@@ -734,7 +750,7 @@ function App() {
               誰でもブラウザだけで自然なクローン動画を完成。編集ソフトは不要です。
             </p>
           </div>
-          <div className="chip chip-strong">無料登録でチケット3枚プレゼント</div>
+          <div className="chip chip-strong">3 tickets on sign-up / 無料登録でチケット3枚</div>
         </div>
         <div className="feature-grid">
           {FEATURE_CARDS.map((card) => (
@@ -760,18 +776,12 @@ function App() {
             </p>
             <p className="lede lede-ja">声・口パク・顔が一括で仕上がるサンプルを再生して確認。</p>
           </div>
-          <div className="chip">Your assets stay yours</div>
+          <div className="chip">Your assets stay yours / 素材はあなたのまま</div>
         </div>
         <div className="showreel-grid">
           {SHOWREEL_CLIPS.map((clip) => (
             <div className="showreel-card" key={clip.src}>
-              <video
-                src={clip.src}
-                playsInline
-                controls
-                preload="auto"
-                muted={false}
-              />
+              <video src={clip.src} playsInline controls preload="auto" muted={false} />
               <div className="showreel-meta">
                 <strong>{clip.titleEn}</strong>
                 <span>{clip.titleJa}</span>
@@ -809,7 +819,11 @@ function App() {
       <section className="panel terms-panel">
         <h2>Terms / 利用規約</h2>
         <p className="muted">
-          生成されたコンテンツの責任は利用者にあります。著作権を侵害する顔・音声・映像では生成しないでください。
+          You are responsible for generated content. Do not upload or generate with faces/voices you
+          cannot legally use, and avoid infringing materials. / 生成されたコンテンツの責任は利用者にあります。著作権を侵害する顔・音声・映像では生成しないでください。
+        </p>
+        <p className="muted">
+          Only upload assets you are allowed to use; the site is not liable for outputs. /
           アップロードした素材は適法に使用できるものに限り、サイト側は成果物に対する責任を負いません。
         </p>
       </section>
