@@ -103,19 +103,22 @@ const FEATURE_CARDS = [
 
 const SHOWREEL_CLIPS = [
   {
-    src: '/media/voice-morph-2.mp4',
-    titleEn: 'Voice clone with your tone',
-    titleJa: '声質コピーで自然なトーン',
+    src: CREATIVE_DEMO,
+    titleEn: 'Script + lip-sync (cloned voice sample)',
+    titleJa: 'クローン声でセリフを差し替えた例',
+    desc: 'Captured from a personal reading, cloned and synced to new lines.',
   },
   {
-    src: CREATIVE_DEMO,
-    titleEn: 'Script + lip-sync preview',
-    titleJa: 'セリフ差し替えと口パク例',
+    src: '/media/voice-morph-2.mp4',
+    titleEn: 'Voice clone to new language/lines',
+    titleJa: '声質コピーで別の言語・台本へ',
+    desc: 'Your own timbre transferred to new phrases with natural lip motion.',
   },
   {
     src: HERO_VIDEO,
-    titleEn: 'Merged result sample',
-    titleJa: '合成後の完成動画',
+    titleEn: 'Voice cloning for any input / 日英どちらの声でもコピー',
+    titleJa: 'どんな音声からでも声質コピーし日英対応で仕上げ',
+    desc: 'Upload any short sample; the studio matches tone and outputs EN/JA video.',
   },
 ]
 
@@ -493,12 +496,12 @@ function App() {
               </div>
             </div>
             <div className="source-strip">
-              <div className="mini-card">
+              <div className="mini-card tall-card">
                 <img src={FACE_SOURCE} alt="Face source" />
                 <p>Face source / 元の顔</p>
               </div>
-              <div className="mini-card">
-                <video src={BASE_TRACK} autoPlay muted loop playsInline />
+              <div className="mini-card tall-card">
+                <video src={BASE_TRACK} autoPlay muted playsInline />
                 <p>Base video / ベース映像</p>
               </div>
             </div>
@@ -749,7 +752,6 @@ function App() {
             <div className="showreel-card" key={clip.src}>
               <video
                 src={clip.src}
-                loop
                 playsInline
                 controls
                 preload="auto"
@@ -758,6 +760,7 @@ function App() {
               <div className="showreel-meta">
                 <strong>{clip.titleEn}</strong>
                 <span>{clip.titleJa}</span>
+                {clip.desc && <small className="muted-text">{clip.desc}</small>}
               </div>
             </div>
           ))}

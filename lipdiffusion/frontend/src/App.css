@@ -124,7 +124,7 @@ body {
 .mini-card img,
 .mini-card video {
   width: 100%;
-  height: 120px;
+  height: 160px;
   border-radius: 10px;
   display: block;
   object-fit: cover;
@@ -133,6 +133,11 @@ body {
 .mini-card p {
   margin: 0.35rem 0 0;
   font-size: 0.85rem;
+}
+
+.tall-card img,
+.tall-card video {
+  height: 180px;
 }
 
 .eyebrow {
