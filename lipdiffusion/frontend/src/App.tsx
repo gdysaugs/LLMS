@@ -14,6 +14,9 @@ const HERO_VIDEO = '/media/fusion-result.mp4'
 const FACE_SOURCE = '/media/face-source.jpg'
 const BASE_TRACK = '/media/base-track.mp4'
 const CREATIVE_DEMO = '/media/creative-demo.mp4'
+const VOICE_SRC_LEFT = '/media/voice-source-left.wav'
+const VOICE_SRC_MID = '/media/voice-source-mid.mp3'
+const VOICE_SRC_RIGHT = '/media/voice-source-right.wav'
 
 async function fetchWithRetry(
   url: string,
@@ -74,8 +77,8 @@ const FEATURE_CARDS = [
   {
     titleEn: 'Clone your tone',
     titleJa: '声質コピー',
-    bodyEn: 'Upload a short self-intro and the studio mirrors your tone and energy.',
-    bodyJa: '数十秒の声だけであなたらしい声質を再現。余計な調整は不要です。',
+    bodyEn: 'Upload a 1-second snippet and the studio mirrors your tone and energy.',
+    bodyJa: '1秒の声だけであなたらしい声質を再現。余計な調整は不要です。',
     tag: 'Voice',
   },
   {
@@ -101,24 +104,35 @@ const FEATURE_CARDS = [
   },
 ]
 
-const SHOWREEL_CLIPS = [
+type ShowreelClip = {
+  src: string
+  titleEn: string
+  titleJa: string
+  desc?: string
+  audioSrc: string
+}
+
+const SHOWREEL_CLIPS: ShowreelClip[] = [
   {
     src: CREATIVE_DEMO,
     titleEn: 'Script + lip-sync (cloned voice sample)',
     titleJa: 'クローン声でセリフを差し替えた例',
-    desc: 'Captured from a personal reading, cloned and synced to new lines.',
+    desc: '1秒の声からクローンし、新しいセリフに合わせて口パクと声を同期。',
+    audioSrc: VOICE_SRC_MID,
   },
   {
     src: '/media/voice-morph-2.mp4',
     titleEn: 'Voice clone to new language/lines',
     titleJa: '声質コピーで別の言語・台本へ',
-    desc: 'Your own timbre transferred to new phrases with natural lip motion.',
+    desc: '短い音声をもとに声色を転写し、別言語でも自然な口の動きで再生。',
+    audioSrc: VOICE_SRC_LEFT,
   },
   {
     src: HERO_VIDEO,
     titleEn: 'Voice cloning for any input / 日英どちらの声でもコピー',
     titleJa: 'どんな音声からでも声質コピーし日英対応で仕上げ',
-    desc: 'Upload any short sample; the studio matches tone and outputs EN/JA video.',
+    desc: 'どの音声でもトーンを合わせ、英日どちらのセリフでも映像を出力。',
+    audioSrc: VOICE_SRC_RIGHT,
   },
 ]
 
@@ -465,7 +479,7 @@ function App() {
                 rel={isAuthenticated ? 'noopener' : undefined}
                 onClick={handleStudioClick}
               >
-                {isAuthenticated ? 'Open studio / スタジオを開く' : 'Start free / 無料で始める'}
+                {isAuthenticated ? '動画を作成する' : '動画を作成する'}
               </a>
               <div className="cta-note">
                 <span className="chip">3 tickets on free sign-up</span>
@@ -501,7 +515,7 @@ function App() {
                 <p>Face source / 元の顔</p>
               </div>
               <div className="mini-card tall-card">
-                <video src={BASE_TRACK} autoPlay muted playsInline />
+                <video src={BASE_TRACK} autoPlay loop muted playsInline />
                 <p>Base video / ベース映像</p>
               </div>
             </div>
@@ -761,6 +775,10 @@ function App() {
                 <strong>{clip.titleEn}</strong>
                 <span>{clip.titleJa}</span>
                 {clip.desc && <small className="muted-text">{clip.desc}</small>}
+                <audio controls preload="auto" className="audio-inline">
+                  <source src={clip.audioSrc} />
+                  Your browser does not support audio playback.
+                </audio>
               </div>
             </div>
           ))}
@@ -785,6 +803,14 @@ function App() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel terms-panel">
+        <h2>Terms / 利用規約</h2>
+        <p className="muted">
+          生成されたコンテンツの責任は利用者にあります。著作権を侵害する顔・音声・映像では生成しないでください。
+          アップロードした素材は適法に使用できるものに限り、サイト側は成果物に対する責任を負いません。
+        </p>
       </section>
     </div>
   )

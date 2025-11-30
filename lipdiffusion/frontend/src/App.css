@@ -334,6 +334,11 @@ h3 {
   color: var(--muted);
 }
 
+.audio-inline {
+  margin-top: 0.4rem;
+  width: 100%;
+}
+
 .flow-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -500,6 +505,10 @@ button:not(:disabled):hover {
   margin-top: 0.25rem;
   color: #8c93ad;
   font-size: 0.8rem;
+}
+
+.terms-panel p {
+  margin: 0.25rem 0 0;
 }
 
 @media (max-width: 720px) {
