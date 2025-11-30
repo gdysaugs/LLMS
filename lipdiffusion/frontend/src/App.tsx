@@ -5,9 +5,7 @@ import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
 const APP_URL = import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui'
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi'
-
 const OAUTH_REDIRECT_URL =
   import.meta.env.VITE_SUPABASE_REDIRECT_URL ??
   (typeof window !== 'undefined' ? window.location.origin : undefined)
@@ -15,11 +13,8 @@ const OAUTH_REDIRECT_URL =
 const HERO_VIDEO = '/media/fusion-result.mp4'
 const FACE_SOURCE = '/media/face-source.jpg'
 const BASE_TRACK = '/media/base-track.mp4'
+const CREATIVE_DEMO = '/media/creative-demo.mp4'
 
-/**
- * Fetch with automatic retry for 502/503 errors (backend starting up)
- * Implements exponential backoff with jitter
- */
 async function fetchWithRetry(
   url: string,
   options?: RequestInit,
@@ -108,24 +103,14 @@ const FEATURE_CARDS = [
 
 const SHOWREEL_CLIPS = [
   {
-    src: '/media/voice-morph-1.mp4',
-    titleEn: 'Lip-sync to a new line',
-    titleJa: '新しいセリフでもぴったり口パク',
-  },
-  {
     src: '/media/voice-morph-2.mp4',
     titleEn: 'Voice clone with your tone',
     titleJa: '声質コピーで自然なトーン',
   },
   {
-    src: '/media/voice-morph-3.mp4',
-    titleEn: 'Face swap preview',
-    titleJa: '顔合成の仕上がり',
-  },
-  {
-    src: '/media/voice-morph-4.mp4',
-    titleEn: 'Script rewrite & sync',
-    titleJa: 'セリフ差し替えと同期',
+    src: CREATIVE_DEMO,
+    titleEn: 'Script + lip-sync preview',
+    titleJa: 'セリフ差し替えと口パク例',
   },
   {
     src: HERO_VIDEO,
@@ -513,7 +498,7 @@ function App() {
                 <p>Face source / 元の顔</p>
               </div>
               <div className="mini-card">
-                <video src={BASE_TRACK} muted loop playsInline />
+                <video src={BASE_TRACK} autoPlay muted loop playsInline />
                 <p>Base video / ベース映像</p>
               </div>
             </div>
@@ -521,81 +506,7 @@ function App() {
         </div>
       </header>
 
-      <section className="panel feature-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">All-in-one pipeline</p>
-            <h2>Voice, lips, script, and face in one pass</h2>
-            <p className="lede">
-              English & Japanese creators can finish a believable clone video without touching a
-              timeline.
-            </p>
-            <p className="lede lede-ja">
-              誰でもブラウザだけで自然なクローン動画を完成。編集ソフトは不要です。
-            </p>
-          </div>
-          <div className="chip chip-strong">無料登録でチケット3枚プレゼント</div>
-        </div>
-        <div className="feature-grid">
-          {FEATURE_CARDS.map((card) => (
-            <article className="feature-card" key={card.titleEn}>
-              <span className="tag">{card.tag}</span>
-              <h3>
-                {card.titleEn} <span className="muted-text">/ {card.titleJa}</span>
-              </h3>
-              <p>{card.bodyEn}</p>
-              <p className="muted-text">{card.bodyJa}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel showreel-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Showreel</p>
-            <h2>See it in motion / 動きで見る</h2>
-            <p className="lede">
-              Provided clips show how voice, lip-sync, and face merge land after one run.
-            </p>
-            <p className="lede lede-ja">声・口パク・顔が一括で仕上がるサンプルを再生して確認。</p>
-          </div>
-          <div className="chip">Your assets stay yours</div>
-        </div>
-        <div className="showreel-grid">
-          {SHOWREEL_CLIPS.map((clip) => (
-            <div className="showreel-card" key={clip.src}>
-              <video src={clip.src} muted loop playsInline controls preload="metadata" />
-              <div className="showreel-meta">
-                <strong>{clip.titleEn}</strong>
-                <span>{clip.titleJa}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel flow-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Creation flow</p>
-            <h2>From upload to share in three beats / 3ステップで完成</h2>
-          </div>
-        </div>
-        <div className="flow-grid">
-          {FLOW_POINTS.map((item) => (
-            <div className="flow-card" key={item.titleEn}>
-              <h3>
-                {item.titleEn} <span className="muted-text">/ {item.titleJa}</span>
-              </h3>
-              <p>{item.bodyEn}</p>
-              <p className="muted-text">{item.bodyJa}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="panel-grid">
+      <div className="panel-grid panel-grid-prime">
         <section id="auth" className="panel auth-panel">
           <div className="panel-header">
             <h2>Account / アカウント</h2>
@@ -791,6 +702,87 @@ function App() {
           )}
         </section>
       </div>
+
+      <section className="panel feature-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">All-in-one pipeline</p>
+            <h2>Voice, lips, script, and face in one pass</h2>
+            <p className="lede">
+              English & Japanese creators can finish a believable clone video without touching a
+              timeline.
+            </p>
+            <p className="lede lede-ja">
+              誰でもブラウザだけで自然なクローン動画を完成。編集ソフトは不要です。
+            </p>
+          </div>
+          <div className="chip chip-strong">無料登録でチケット3枚プレゼント</div>
+        </div>
+        <div className="feature-grid">
+          {FEATURE_CARDS.map((card) => (
+            <article className="feature-card" key={card.titleEn}>
+              <span className="tag">{card.tag}</span>
+              <h3>
+                {card.titleEn} <span className="muted-text">/ {card.titleJa}</span>
+              </h3>
+              <p>{card.bodyEn}</p>
+              <p className="muted-text">{card.bodyJa}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel showreel-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Showreel</p>
+            <h2>See it in motion / 動きで見る</h2>
+            <p className="lede">
+              Provided clips show how voice, lip-sync, and face merge land after one run.
+            </p>
+            <p className="lede lede-ja">声・口パク・顔が一括で仕上がるサンプルを再生して確認。</p>
+          </div>
+          <div className="chip">Your assets stay yours</div>
+        </div>
+        <div className="showreel-grid">
+          {SHOWREEL_CLIPS.map((clip) => (
+            <div className="showreel-card" key={clip.src}>
+              <video
+                src={clip.src}
+                loop
+                playsInline
+                controls
+                preload="auto"
+                muted={false}
+              />
+              <div className="showreel-meta">
+                <strong>{clip.titleEn}</strong>
+                <span>{clip.titleJa}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel flow-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Creation flow</p>
+            <h2>From upload to share in three beats / 3ステップで完成</h2>
+          </div>
+        </div>
+        <div className="flow-grid">
+          {FLOW_POINTS.map((item) => (
+            <div className="flow-card" key={item.titleEn}>
+              <h3>
+                {item.titleEn} <span className="muted-text">/ {item.titleJa}</span>
+              </h3>
+              <p>{item.bodyEn}</p>
+              <p className="muted-text">{item.bodyJa}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }

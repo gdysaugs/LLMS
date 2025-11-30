@@ -124,8 +124,10 @@ body {
 .mini-card img,
 .mini-card video {
   width: 100%;
+  height: 120px;
   border-radius: 10px;
   display: block;
+  object-fit: cover;
 }
 
 .mini-card p {
@@ -245,6 +247,10 @@ h3 {
   gap: 1rem;
 }
 
+.panel-grid-prime {
+  margin-bottom: 1.5rem;
+}
+
 .status {
   padding: 0.3rem 0.9rem;
   border-radius: 999px;
@@ -311,6 +317,8 @@ h3 {
 .showreel-card video {
   width: 100%;
   display: block;
+  background: #0b0c12;
+  object-fit: cover;
 }
 
 .showreel-meta {
