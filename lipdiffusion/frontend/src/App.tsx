@@ -485,6 +485,7 @@ function App() {
                 <span className="chip">3 tickets on free sign-up</span>
                 <span className="chip">Browser only ・ No editor needed</span>
                 <span className="chip">For creators & teams</span>
+                <span className="chip">動画と音声だけでOK / 顔写真はオプション合成</span>
               </div>
             </div>
             {isAuthenticated && (
