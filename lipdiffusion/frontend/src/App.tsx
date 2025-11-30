@@ -4,15 +4,17 @@ import type { Session } from '@supabase/supabase-js'
 import './App.css'
 import { isAuthConfigured, supabase } from './lib/supabaseClient'
 
-const APP_URL =
-  import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui'
+const APP_URL = import.meta.env.VITE_APP_URL ?? 'https://api.lipdiffusion.uk/gradio-ui'
 
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi'
 
 const OAUTH_REDIRECT_URL =
   import.meta.env.VITE_SUPABASE_REDIRECT_URL ??
   (typeof window !== 'undefined' ? window.location.origin : undefined)
+
+const HERO_VIDEO = '/media/fusion-result.mp4'
+const FACE_SOURCE = '/media/face-source.jpg'
+const BASE_TRACK = '/media/base-track.mp4'
 
 /**
  * Fetch with automatic retry for 502/503 errors (backend starting up)
@@ -22,7 +24,7 @@ async function fetchWithRetry(
   url: string,
   options?: RequestInit,
   maxRetries = 5,
-  baseDelay = 1000
+  baseDelay = 1000,
 ): Promise<Response> {
   let lastError: Error | null = null
 
@@ -30,13 +32,12 @@ async function fetchWithRetry(
     try {
       const response = await fetch(url, options)
 
-      // Retry on 502 Bad Gateway or 503 Service Unavailable
       if ((response.status === 502 || response.status === 503) && attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500
         console.warn(
-          `[fetchWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed with ${response.status}. Retrying in ${Math.round(delay)}ms...`
+          `[fetchWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed with ${response.status}. Retrying in ${Math.round(delay)}ms...`,
         )
-        await new Promise(resolve => setTimeout(resolve, delay))
+        await new Promise((resolve) => setTimeout(resolve, delay))
         continue
       }
 
@@ -48,9 +49,9 @@ async function fetchWithRetry(
         const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 500
         console.warn(
           `[fetchWithRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed with network error. Retrying in ${Math.round(delay)}ms...`,
-          error
+          error,
         )
-        await new Promise(resolve => setTimeout(resolve, delay))
+        await new Promise((resolve) => setTimeout(resolve, delay))
         continue
       }
     }
@@ -58,9 +59,6 @@ async function fetchWithRetry(
 
   throw lastError ?? new Error('Max retries exceeded')
 }
-
-
-
 
 type HistoryItem = {
   output_url: string
@@ -76,6 +74,86 @@ type BillingResponse = {
   current_period_end?: string | null
   has_active_subscription: boolean
 }
+
+const FEATURE_CARDS = [
+  {
+    titleEn: 'Clone your tone',
+    titleJa: '声質コピー',
+    bodyEn: 'Upload a short self-intro and the studio mirrors your tone and energy.',
+    bodyJa: '数十秒の声だけであなたらしい声質を再現。余計な調整は不要です。',
+    tag: 'Voice',
+  },
+  {
+    titleEn: 'Lip-sync any script',
+    titleJa: '好きなセリフで口パク',
+    bodyEn: 'Drop in any line and see lips match perfectly without manual keyframes.',
+    bodyJa: '台本を入れ替えても自動で口の動きが合うので、編集はすべてブラウザで完結。',
+    tag: 'Script',
+  },
+  {
+    titleEn: 'Swap faces cleanly',
+    titleJa: '顔合成を一発で',
+    bodyEn: 'Blend your face onto existing footage while keeping lighting and motion natural.',
+    bodyJa: '顔だけをきれいに差し替え。光と動きが自然に馴染むので違和感が出ません。',
+    tag: 'Face',
+  },
+  {
+    titleEn: 'All-in-one render',
+    titleJa: '声・口・セリフ・顔をまとめて',
+    bodyEn: 'Voice copy, lip-sync, script change, and face merge finish in a single run.',
+    bodyJa: '声質コピー・口パク・セリフ差し替え・顔合成をまとめて一括処理。',
+    tag: 'One click',
+  },
+]
+
+const SHOWREEL_CLIPS = [
+  {
+    src: '/media/voice-morph-1.mp4',
+    titleEn: 'Lip-sync to a new line',
+    titleJa: '新しいセリフでもぴったり口パク',
+  },
+  {
+    src: '/media/voice-morph-2.mp4',
+    titleEn: 'Voice clone with your tone',
+    titleJa: '声質コピーで自然なトーン',
+  },
+  {
+    src: '/media/voice-morph-3.mp4',
+    titleEn: 'Face swap preview',
+    titleJa: '顔合成の仕上がり',
+  },
+  {
+    src: '/media/voice-morph-4.mp4',
+    titleEn: 'Script rewrite & sync',
+    titleJa: 'セリフ差し替えと同期',
+  },
+  {
+    src: HERO_VIDEO,
+    titleEn: 'Merged result sample',
+    titleJa: '合成後の完成動画',
+  },
+]
+
+const FLOW_POINTS = [
+  {
+    titleEn: 'Use your own assets',
+    titleJa: '自分の素材をそのまま使える',
+    bodyEn: 'Drop in your voice, base video, and face photo. No extra prep work.',
+    bodyJa: '自分の声・ベース動画・顔写真をアップするだけ。事前の調整は不要です。',
+  },
+  {
+    titleEn: 'One run to finish',
+    titleJa: '1タップで同時処理',
+    bodyEn: 'The studio handles voice copy, lip moves, script swap, and face merge together.',
+    bodyJa: '声質コピー、口の動き、セリフ差し替え、顔合成を同時に処理します。',
+  },
+  {
+    titleEn: 'Share instantly',
+    titleJa: 'そのまま共有できる',
+    bodyEn: 'Render, preview, and download right in the browser. No editing timeline needed.',
+    bodyJa: 'ブラウザ上でそのままプレビューしてダウンロード。編集タイムラインは不要。',
+  },
+]
 
 function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -117,7 +195,6 @@ function App() {
   }, [])
 
   useEffect(() => {
-    // Handle OAuth PKCE callback parameters on the client
     async function exchangeOAuthCode() {
       if (!supabase) return
       const hasCode = typeof window !== 'undefined' && window.location.search.includes('code=')
@@ -261,7 +338,7 @@ function App() {
         })
         if (error) throw error
         setAuthStatus('success')
-        setAuthMessage('確認メールを送信しました。受信箱をチェックしてください。')
+        setAuthMessage('確認メールを送信しました。受信箱を確認してください。')
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail,
@@ -283,7 +360,6 @@ function App() {
     if (!supabase) return
     await supabase.auth.signOut()
 
-    // Clear domain-wide cookies so Gradio UI access is revoked
     const cookieOptions = `domain=.lipdiffusion.uk; path=/; max-age=0; SameSite=None; Secure`
     document.cookie = `user_email=; ${cookieOptions}`
     document.cookie = `sb_access_token=; ${cookieOptions}`
@@ -364,7 +440,6 @@ function App() {
 
   const handleStudioClick = () => {
     if (!isAuthenticated || !userEmail || !session?.access_token) return
-    // Set domain-wide cookies so Gradio UI can access them
     const maxAge = 3600
     const cookieOptions = `domain=.lipdiffusion.uk; path=/; max-age=${maxAge}; SameSite=None; Secure`
     document.cookie = `user_email=${encodeURIComponent(userEmail)}; ${cookieOptions}`
@@ -376,241 +451,346 @@ function App() {
 
   return (
     <div className="App">
+      <div className="background-glow" aria-hidden />
+
       <header className="hero">
-        <p className="eyebrow">lipdiffusion</p>
-        <h1>Voice cloning & lip-sync studio</h1>
-        <p className="lede">
-          GPU ワーカーで SoVITS / Wav2Lip / FaceFusion をまとめて実行。音声クローンから動画生成
-          までブラウザだけで完結します。
-        </p>
-        <div className="hero-actions">
-          <a
-            className="primary-link"
-            href={isAuthenticated ? `${APP_URL}?email=${encodeURIComponent(userEmail)}` : '#auth'}
-            target={isAuthenticated ? '_blank' : undefined}
-            rel={isAuthenticated ? 'noopener' : undefined}
-            onClick={handleStudioClick}
-          >
-            {isAuthenticated ? 'スタジオを開く' : '無料アカウント作成'}
-          </a>
-          <a className="secondary-link" href="mailto:hello@lipdiffusion.uk">
-            デモを依頼
-          </a>
-        </div>
-        {isAuthenticated && (
-          <p className="signed-in-banner">Signed in as {userEmail || session?.user?.id}</p>
-        )}
-      </header>
-
-      <section id="auth" className="panel auth-panel">
-        <div className="panel-header">
-          <h2>アカウント</h2>
-          <span
-            className={
-              'status ' +
-              (isAuthenticated
-                ? 'status-success'
-                : isAuthConfigured
-                  ? 'status-warning'
-                  : 'status-error')
-            }
-          >
-            {isAuthenticated ? 'signed in' : isAuthConfigured ? 'guest' : 'auth disabled'}
-          </span>
-        </div>
-
-        {!isAuthConfigured ? (
-          <p className="error">
-            Supabase の URL / anon key が未設定です。Cloudflare Pages の環境変数に
-            <code>VITE_SUPABASE_URL</code> と <code>VITE_SUPABASE_ANON_KEY</code> を入力してください。
-          </p>
-        ) : isAuthenticated ? (
-          <div className="auth-signed-in">
-            <p>
-              Logged in as <strong>{userEmail || session?.user?.id}</strong>
+        <div className="hero-grid">
+          <div className="hero-copy">
+            <p className="eyebrow">LipDiffusion Studio ・ 日本語 / English</p>
+            <h1>Make yourself speak anywhere</h1>
+            <p className="lede">
+              Clone your voice, sync lips, rewrite the script, and swap faces in one go. Your own
+              voice and visuals become a new video in minutes.
             </p>
-            <div className="auth-actions">
-              <button type="button" className="button-secondary" onClick={handleSignOut}>
-                Sign out
-              </button>
+            <p className="lede lede-ja">
+              声質コピー・口パク・セリフ差し替え・顔合成をまとめて処理。自分の声と顔で、数分で新しい映像を作れます。
+            </p>
+            <div className="hero-actions">
+              <a
+                className="primary-link"
+                href={
+                  isAuthenticated
+                    ? `${APP_URL}?email=${encodeURIComponent(userEmail)}`
+                    : '#auth'
+                }
+                target={isAuthenticated ? '_blank' : undefined}
+                rel={isAuthenticated ? 'noopener' : undefined}
+                onClick={handleStudioClick}
+              >
+                {isAuthenticated ? 'Open studio / スタジオを開く' : 'Start free / 無料で始める'}
+              </a>
+              <div className="cta-note">
+                <span className="chip">3 tickets on free sign-up</span>
+                <span className="chip">Browser only ・ No editor needed</span>
+                <span className="chip">For creators & teams</span>
+              </div>
+            </div>
+            {isAuthenticated && (
+              <p className="signed-in-banner">
+                Signed in as {userEmail || session?.user?.id}
+              </p>
+            )}
+          </div>
+
+          <div className="hero-visual">
+            <div className="video-shell">
+              <video
+                src={HERO_VIDEO}
+                autoPlay
+                muted
+                loop
+                playsInline
+                poster="/media/face-source.jpg"
+              />
+              <div className="video-label">
+                <div>Face blend demo</div>
+                <small>声・口パク・顔合成の仕上がりサンプル</small>
+              </div>
+            </div>
+            <div className="source-strip">
+              <div className="mini-card">
+                <img src={FACE_SOURCE} alt="Face source" />
+                <p>Face source / 元の顔</p>
+              </div>
+              <div className="mini-card">
+                <video src={BASE_TRACK} muted loop playsInline />
+                <p>Base video / ベース映像</p>
+              </div>
             </div>
           </div>
-        ) : (
-          <form className="auth-form" onSubmit={handleAuthSubmit}>
-            <label className="field">
-              <span>Email</span>
-              <input
-                type="email"
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-              />
-            </label>
+        </div>
+      </header>
 
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                minLength={6}
-                required
-              />
-            </label>
-
-            <label className="field">
-              <span>Action</span>
-              <select value={authMode} onChange={(e) => setAuthMode(e.target.value as 'signin' | 'signup')}>
-                <option value="signup">Create account</option>
-                <option value="signin">Sign in</option>
-              </select>
-            </label>
-
-            <button type="submit" disabled={authStatus === 'loading'}>
-              {authMode === 'signup' ? 'Send confirmation email' : 'Sign in'}
-            </button>
-            <button
-              type="button"
-              className="button-secondary"
-              onClick={handleGoogleSignIn}
-              disabled={authStatus === 'loading'}
-            >
-              Sign in with Google
-            </button>
-            {authMessage && (
-              <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>
-            )}
-          </form>
-        )}
+      <section className="panel feature-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">All-in-one pipeline</p>
+            <h2>Voice, lips, script, and face in one pass</h2>
+            <p className="lede">
+              English & Japanese creators can finish a believable clone video without touching a
+              timeline.
+            </p>
+            <p className="lede lede-ja">
+              誰でもブラウザだけで自然なクローン動画を完成。編集ソフトは不要です。
+            </p>
+          </div>
+          <div className="chip chip-strong">無料登録でチケット3枚プレゼント</div>
+        </div>
+        <div className="feature-grid">
+          {FEATURE_CARDS.map((card) => (
+            <article className="feature-card" key={card.titleEn}>
+              <span className="tag">{card.tag}</span>
+              <h3>
+                {card.titleEn} <span className="muted-text">/ {card.titleJa}</span>
+              </h3>
+              <p>{card.bodyEn}</p>
+              <p className="muted-text">{card.bodyJa}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
-      <section className="panel billing-panel">
+      <section className="panel showreel-panel">
         <div className="panel-header">
-          <h2>サブスク / チケット</h2>
-          <span
-            className={
-              'status ' +
-              (billingStatus === 'error'
-                ? 'status-error'
-                : billing?.has_active_subscription
-                  ? 'status-success'
-                  : 'status-warning')
-            }
-          >
-            {billingStatus === 'loading'
-              ? 'loading'
-              : billing?.has_active_subscription
-                ? 'active'
-                : 'inactive'}
-          </span>
+          <div>
+            <p className="eyebrow">Showreel</p>
+            <h2>See it in motion / 動きで見る</h2>
+            <p className="lede">
+              Provided clips show how voice, lip-sync, and face merge land after one run.
+            </p>
+            <p className="lede lede-ja">声・口パク・顔が一括で仕上がるサンプルを再生して確認。</p>
+          </div>
+          <div className="chip">Your assets stay yours</div>
         </div>
-        {!isAuthenticated ? (
-          <p className="muted">サインインするとチケット残高とサブスク状態を確認できます。</p>
-        ) : billingStatus === 'loading' ? (
-          <p className="muted">読み込み中...</p>
-        ) : billingStatus === 'error' ? (
-          <p className="error">{billingMessage}</p>
-        ) : (
-          <>
-            <ul className="billing-stats">
-              <li>
-                <span className="label">Tickets</span>
-                <strong>{billing?.tickets ?? 0}</strong>
-              </li>
-              <li>
-                <span className="label">Status</span>
-                <strong>{billing?.subscription_status ?? 'inactive'}</strong>
-              </li>
-              {billing?.current_period_end && (
-                <li>
-                  <span className="label">更新予定</span>
-                  <span>{new Date(billing.current_period_end).toLocaleDateString()}</span>
-                </li>
-              )}
-            </ul>
-            <div className="billing-actions">
-              <button
-                type="button"
-                onClick={handleStartSubscription}
-                disabled={!isAuthenticated || billingAction === 'loading'}
-              >
-                Stripe で購読
+        <div className="showreel-grid">
+          {SHOWREEL_CLIPS.map((clip) => (
+            <div className="showreel-card" key={clip.src}>
+              <video src={clip.src} muted loop playsInline controls preload="metadata" />
+              <div className="showreel-meta">
+                <strong>{clip.titleEn}</strong>
+                <span>{clip.titleJa}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel flow-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Creation flow</p>
+            <h2>From upload to share in three beats / 3ステップで完成</h2>
+          </div>
+        </div>
+        <div className="flow-grid">
+          {FLOW_POINTS.map((item) => (
+            <div className="flow-card" key={item.titleEn}>
+              <h3>
+                {item.titleEn} <span className="muted-text">/ {item.titleJa}</span>
+              </h3>
+              <p>{item.bodyEn}</p>
+              <p className="muted-text">{item.bodyJa}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="panel-grid">
+        <section id="auth" className="panel auth-panel">
+          <div className="panel-header">
+            <h2>Account / アカウント</h2>
+            <span
+              className={
+                'status ' +
+                (isAuthenticated
+                  ? 'status-success'
+                  : isAuthConfigured
+                    ? 'status-warning'
+                    : 'status-error')
+              }
+            >
+              {isAuthenticated ? 'signed in' : isAuthConfigured ? 'guest' : 'auth disabled'}
+            </span>
+          </div>
+
+          {!isAuthConfigured ? (
+            <p className="error">
+              Supabase の URL / anon key が未設定です。Cloudflare Pages の環境変数に
+              <code>VITE_SUPABASE_URL</code> と <code>VITE_SUPABASE_ANON_KEY</code>
+              を入力してください。
+            </p>
+          ) : isAuthenticated ? (
+            <div className="auth-signed-in">
+              <p>
+                Logged in as <strong>{userEmail || session?.user?.id}</strong>
+              </p>
+              <div className="auth-actions">
+                <button type="button" className="button-secondary" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form className="auth-form" onSubmit={handleAuthSubmit}>
+              <label className="field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  minLength={6}
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Action</span>
+                <select
+                  value={authMode}
+                  onChange={(e) => setAuthMode(e.target.value as 'signin' | 'signup')}
+                >
+                  <option value="signup">Create account</option>
+                  <option value="signin">Sign in</option>
+                </select>
+              </label>
+
+              <button type="submit" disabled={authStatus === 'loading'}>
+                {authMode === 'signup' ? 'Send confirmation email' : 'Sign in'}
               </button>
               <button
                 type="button"
                 className="button-secondary"
-                onClick={handleOpenPortal}
-                disabled={!isAuthenticated || billingAction === 'loading'}
+                onClick={handleGoogleSignIn}
+                disabled={authStatus === 'loading'}
               >
-                請求情報を管理
+                Sign in with Google
               </button>
-            </div>
-            {billingMessage && <p className="muted">{billingMessage}</p>}
-          </>
-        )}
-      </section>
+              {authMessage && (
+                <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>
+              )}
+            </form>
+          )}
+        </section>
 
-      <section className="panel history-panel">
-        <div className="panel-header">
-          <h2>最新生成履歴（24時間）</h2>
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={!isAuthenticated || historyStatus === 'loading'}
-            onClick={() => fetchHistory(session)}
-          >
-            更新
-          </button>
-        </div>
-
-        {!isAuthenticated ? (
-          <p className="muted">ログインすると直近24時間の生成URLが表示されます。</p>
-        ) : historyStatus === 'loading' ? (
-          <p className="muted">読み込み中...</p>
-        ) : historyStatus === 'error' ? (
-          <p className="error">{historyMessage}</p>
-        ) : history.length === 0 ? (
-          <p className="muted">過去24時間の生成履歴はありません。</p>
-        ) : (
-          <ul className="history-list">
-            {history.map((item) => (
-              <li key={`${item.created_at}-${item.output_url}`}>
+        <section className="panel billing-panel">
+          <div className="panel-header">
+            <h2>Billing & Tickets / 課金とチケット</h2>
+            <span
+              className={
+                'status ' +
+                (billingStatus === 'error'
+                  ? 'status-error'
+                  : billing?.has_active_subscription
+                    ? 'status-success'
+                    : 'status-warning')
+              }
+            >
+              {billingStatus === 'loading'
+                ? 'loading'
+                : billing?.has_active_subscription
+                  ? 'active'
+                  : 'inactive'}
+            </span>
+          </div>
+          {!isAuthenticated ? (
+            <p className="muted">サインインするとチケット残高とサブスク状態を確認できます。</p>
+          ) : billingStatus === 'loading' ? (
+            <p className="muted">読み込み中...</p>
+          ) : billingStatus === 'error' ? (
+            <p className="error">{billingMessage}</p>
+          ) : (
+            <>
+              <ul className="billing-stats">
+                <li>
+                  <span className="label">Tickets</span>
+                  <strong>{billing?.tickets ?? 0}</strong>
+                </li>
+                <li>
+                  <span className="label">Status</span>
+                  <strong>{billing?.subscription_status ?? 'inactive'}</strong>
+                </li>
+                {billing?.current_period_end && (
+                  <li>
+                    <span className="label">更新予定日</span>
+                    <span>{new Date(billing.current_period_end).toLocaleDateString()}</span>
+                  </li>
+                )}
+              </ul>
+              <div className="billing-actions">
                 <button
                   type="button"
-                  className="history-link"
-                  onClick={() => handleHistoryDownload(item.output_url)}
+                  onClick={handleStartSubscription}
+                  disabled={!isAuthenticated || billingAction === 'loading'}
                 >
-                  {item.output_url}
+                  Stripe で購読
                 </button>
-                <span className="history-time">
-                  {new Date(item.created_at).toLocaleString()}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={handleOpenPortal}
+                  disabled={!isAuthenticated || billingAction === 'loading'}
+                >
+                  請求情報を管理
+                </button>
+              </div>
+              {billingMessage && <p className="muted">{billingMessage}</p>}
+            </>
+          )}
+        </section>
 
-      <section className="panel highlights">
-        <h2>Why teams use lipdiffusion</h2>
-        <ul>
-          <li>🎙️ SoVITS + wav2lip + FaceFusion を 1 タップで実行</li>
-          <li>🧠 RTX 3090 / L40S など RunPod GPU を常時確保</li>
-          <li>🔐 Supabase Auth でユーザーを一元管理</li>
-          <li>⚙️ API Gateway からバッチ実行や自動化も可能</li>
-        </ul>
-      </section>
+        <section className="panel history-panel">
+          <div className="panel-header">
+            <h2>Latest renders / 過去24時間</h2>
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={!isAuthenticated || historyStatus === 'loading'}
+              onClick={() => fetchHistory(session)}
+            >
+              更新
+            </button>
+          </div>
 
-      <section className="panel highlights">
-        <h2>ロードマップ</h2>
-        <ul>
-          <li>📦 プロジェクト別の生成ログ & 課金レポート</li>
-          <li>🗣️ 多言語 SoVITS プロンプトプリセット</li>
-          <li>🎬 クリエイター向けテンプレと自動公開ワークフロー</li>
-        </ul>
-      </section>
+          {!isAuthenticated ? (
+            <p className="muted">ログインすると直近24時間の生成URLが表示されます。</p>
+          ) : historyStatus === 'loading' ? (
+            <p className="muted">読み込み中...</p>
+          ) : historyStatus === 'error' ? (
+            <p className="error">{historyMessage}</p>
+          ) : history.length === 0 ? (
+            <p className="muted">過去24時間の生成履歴はありません。</p>
+          ) : (
+            <ul className="history-list">
+              {history.map((item) => (
+                <li key={`${item.created_at}-${item.output_url}`}>
+                  <button
+                    type="button"
+                    className="history-link"
+                    onClick={() => handleHistoryDownload(item.output_url)}
+                  >
+                    {item.output_url}
+                  </button>
+                  <span className="history-time">
+                    {new Date(item.created_at).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   )
 }
