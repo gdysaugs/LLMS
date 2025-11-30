@@ -10,6 +10,10 @@ const APP_URL =
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi')
 
+const OAUTH_REDIRECT_URL =
+  import.meta.env.VITE_SUPABASE_REDIRECT_URL ??
+  (typeof window !== 'undefined' ? window.location.origin : undefined)
+
 /**
  * Fetch with automatic retry for 502/503 errors (backend starting up)
  * Implements exponential backoff with jitter
@@ -112,6 +116,28 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    // Handle OAuth PKCE callback parameters on the client
+    async function exchangeOAuthCode() {
+      if (!supabase) return
+      const hasCode = typeof window !== 'undefined' && window.location.search.includes('code=')
+      const hasState = typeof window !== 'undefined' && window.location.search.includes('state=')
+      if (!hasCode || !hasState) return
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+      if (error) {
+        console.error('[auth] OAuth exchange failed', error)
+        setAuthStatus('error')
+        setAuthMessage(error.message)
+        return
+      }
+      const url = new URL(window.location.href)
+      url.searchParams.delete('code')
+      url.searchParams.delete('state')
+      window.history.replaceState({}, document.title, url.toString())
+    }
+    void exchangeOAuthCode()
+  }, [])
+
   const fetchHistory = useCallback(
     async (activeSession: Session | null) => {
       if (!supabase || !activeSession?.user?.email) {
@@ -192,6 +218,28 @@ function App() {
       setHistoryMessage('')
     }
   }, [session, fetchHistory, fetchBillingStatus])
+
+  const handleGoogleSignIn = async () => {
+    if (!supabase || !isAuthConfigured) {
+      setAuthStatus('error')
+      setAuthMessage('Supabase の環境変数が不足しています。')
+      return
+    }
+    setAuthStatus('loading')
+    setAuthMessage('')
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: OAUTH_REDIRECT_URL,
+        },
+      })
+      if (error) throw error
+    } catch (error) {
+      setAuthStatus('error')
+      setAuthMessage(error instanceof Error ? error.message : 'Googleログインに失敗しました。')
+    }
+  }
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -422,6 +470,14 @@ function App() {
 
             <button type="submit" disabled={authStatus === 'loading'}>
               {authMode === 'signup' ? 'Send confirmation email' : 'Sign in'}
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={handleGoogleSignIn}
+              disabled={authStatus === 'loading'}
+            >
+              Sign in with Google
             </button>
             {authMessage && (
               <p className={authStatus === 'error' ? 'error' : 'muted'}>{authMessage}</p>

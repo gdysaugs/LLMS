@@ -16,6 +16,9 @@ VITE_SUPABASE_URL=https://kfciddmtrdncfkdewhno.supabase.co
 VITE_SUPABASE_ANON_KEY=<supabase anon key>
 VITE_APP_URL=https://q0ozv0e4mxgs1c-7860.proxy.runpod.net/
 
+VITE_SUPABASE_REDIRECT_URL=https://app.lipdiffusion.uk
+(Google OAuth callback; keep in Supabase Auth > Providers > Google redirect URL list)
+
 `VITE_API_BASE_URL` must point at the Cloudflare Worker (`*.workers.dev`) because
 `api.lipdiffusion.uk` itself stays behind Cloudflare Access for FastAPI and will block browser CORS preflights.
 
