@@ -829,10 +829,6 @@ function App() {
             Age/eligibility: all ages may use; follow applicable laws in your region. /
             全年齢利用可ですが、各地域の法令を順守してください。
           </li>
-          <li>
-            Third-party dependence: service availability may depend on external providers
-            (Cloudflare/RunPod/Supabase等). / 外部サービス依存により停止する場合があります。
-          </li>
         </ul>
       </section>
     </div>
