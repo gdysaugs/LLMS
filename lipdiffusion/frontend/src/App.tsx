@@ -91,32 +91,32 @@ type ShowreelClip = {
 
 const FEATURE_CARDS: FeatureCard[] = [
   {
-    titleEn: 'Clone your tone',
-    titleJa: '声質コピー',
-    bodyEn: 'Upload a 1-second snippet and the studio mirrors your tone and energy.',
-    bodyJa: '1秒の声だけであなたらしい声質を再現。余計な調整は不要です。',
+    titleEn: 'Copy your voice in 1 second',
+    titleJa: '1秒の音声で声質をコピー',
+    bodyEn: 'Drop a 1-second clip; we mirror tone and texture instantly.',
+    bodyJa: '1秒の音声だけで声質と特徴をそのまま再現。',
     tag: 'Voice',
   },
   {
-    titleEn: 'Lip-sync any script',
-    titleJa: '好きなセリフで口パク',
-    bodyEn: 'Drop in any line and see lips match perfectly without manual keyframes.',
-    bodyJa: '台本を入れ替えても自動で口の動きが合うので、編集はすべてブラウザで完結。',
+    titleEn: 'Sync lips to the new script',
+    titleJa: '新しいセリフに口パクを同期',
+    bodyEn: 'Type any line; lips match the cloned audio with no editing.',
+    bodyJa: '好きなセリフを入れるだけで、クローン音声に合わせて自動で口パク。',
     tag: 'Script',
   },
   {
-    titleEn: 'Swap faces cleanly',
-    titleJa: '顔合成を一発で',
-    bodyEn: 'Blend your face onto existing footage while keeping lighting and motion natural.',
-    bodyJa: '顔だけをきれいに差し替え。光と動きが自然に馴染むので違和感が出ません。',
+    titleEn: 'Optional face merge',
+    titleJa: '顔合成はオプションで高精度',
+    bodyEn: 'Add a face photo to blend cleanly on existing footage.',
+    bodyJa: '顔写真を追加すれば映像に高精度で合成。入れなくても動画は完成。',
     tag: 'Face',
   },
   {
-    titleEn: 'All-in-one render',
-    titleJa: '声・口・セリフ・顔をまとめて',
-    bodyEn: 'Voice copy, lip-sync, script change, and face merge finish in a single run.',
-    bodyJa: '声質コピー・口パク・セリフ差し替え・顔合成をまとめて一括処理。',
-    tag: 'One click',
+    titleEn: 'World-first all-in-one engine',
+    titleJa: '世界初の一括合成エンジン',
+    bodyEn: 'Voice, lips, script, and face finish in one pass—no timeline work.',
+    bodyJa: '声・口パク・セリフ・顔を一度で処理。編集タイムライン作業は不要。',
+    tag: 'One pass',
   },
 ]
 
@@ -465,9 +465,19 @@ function App() {
   const isAuthenticated = Boolean(session?.access_token)
   const userEmail = session?.user?.email ?? ''
 
+  const topBanner = (
+    <div className="top-banner">
+      <span className="chip chip-strong">
+        World-first: voice, lips, script, face in one engine / 世界初・声・口パク・セリフ・顔を一括合成
+      </span>
+      <span className="chip">Free campaign: 3 tickets on sign-up / 無料登録でチケット3枚プレゼント</span>
+    </div>
+  )
+
   return (
     <div className="App">
       <div className="background-glow" aria-hidden />
+      {topBanner}
 
       <header className="hero">
         <div className="hero-grid">
@@ -479,7 +489,7 @@ function App() {
               voice and visuals become a new video in minutes.
             </p>
             <p className="lede lede-ja">
-              声質コピー・口パク・セリフ差し替え・顔合成をまとめて処理。自分の声と顔で、数分で新しい映像を作れます。
+              世界初の合成エンジンで、声質コピー・口パク・セリフ差し替え・顔合成をまとめて処理。自分の声と顔で、数分で新しい映像を作れます。
             </p>
             <div className="hero-actions">
               <a
@@ -740,14 +750,14 @@ function App() {
       <section className="panel feature-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">All-in-one pipeline</p>
-            <h2>Voice, lips, script, and face in one pass</h2>
+            <p className="eyebrow">How to use</p>
+            <h2>Voice, lips, script, and face in one pass / 世界初の一括合成エンジン</h2>
             <p className="lede">
-              English & Japanese creators can finish a believable clone video without touching a
-              timeline.
+              Copy a 1-second voice, sync to any script, optionally merge a face—then render in one
+              run.
             </p>
             <p className="lede lede-ja">
-              誰でもブラウザだけで自然なクローン動画を完成。編集ソフトは不要です。
+              1秒の声で特徴をコピーし、好きなセリフに口パクを合わせ、顔合成もオプションで一括処理。
             </p>
           </div>
           <div className="chip chip-strong">3 tickets on sign-up / 無料登録でチケット3枚</div>
