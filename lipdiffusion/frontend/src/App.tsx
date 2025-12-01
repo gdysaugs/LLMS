@@ -806,14 +806,34 @@ function App() {
 
       <section className="panel terms-panel">
         <h2>Terms / 利用規約</h2>
-        <p className="muted">
-          You are responsible for generated content. Do not upload or generate with faces/voices you
-          cannot legally use, and avoid infringing materials. / 生成されたコンテンツの責任は利用者にあります。著作権を侵害する顔・音声・映像では生成しないでください。
-        </p>
-        <p className="muted">
-          Only upload assets you are allowed to use; the site is not liable for outputs. /
-          アップロードした素材は適法に使用できるものに限り、サイト側は成果物に対する責任を負いません。
-        </p>
+        <ul className="terms-list">
+          <li>
+            Allowed assets only / 適法な素材のみアップロードしてください。無断の肖像・音声・著作物は禁止です。
+          </li>
+          <li>
+            You own your uploads; you grant us a limited license to process them and render output. /
+            アップロード素材の権利は利用者に帰属し、当サービスは処理・生成のための限定的ライセンスを受けるのみです。
+          </li>
+          <li>
+            Check outputs yourself; accuracy or biases are not guaranteed. /
+            生成結果の確認は利用者の責任で行ってください。正確性やバイアスは保証されません。
+          </li>
+          <li>
+            Service may change or stop without notice; liability is limited to the extent permitted by
+            law. / 予告なく機能変更・停止する場合があります。責任は法の許す範囲で限定されます。
+          </li>
+          <li>
+            Data handling: uploadsや生成ログは機能提供・改善のために一時保存される場合があります。削除依頼がある場合はお知らせください。
+          </li>
+          <li>
+            Age/eligibility: all ages may use; follow applicable laws in your region. /
+            全年齢利用可ですが、各地域の法令を順守してください。
+          </li>
+          <li>
+            Third-party dependence: service availability may depend on external providers
+            (Cloudflare/RunPod/Supabase等). / 外部サービス依存により停止する場合があります。
+          </li>
+        </ul>
       </section>
     </div>
   )
