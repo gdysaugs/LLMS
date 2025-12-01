@@ -465,19 +465,9 @@ function App() {
   const isAuthenticated = Boolean(session?.access_token)
   const userEmail = session?.user?.email ?? ''
 
-  const topBanner = (
-    <div className="top-banner">
-      <span className="chip chip-strong">
-        World-first: voice, lips, script, face in one engine / 世界初・声・口パク・セリフ・顔を一括合成
-      </span>
-      <span className="chip">Free campaign: 3 tickets on sign-up / 無料登録でチケット3枚プレゼント</span>
-    </div>
-  )
-
   return (
     <div className="App">
       <div className="background-glow" aria-hidden />
-      {topBanner}
 
       <header className="hero">
         <div className="hero-grid">
