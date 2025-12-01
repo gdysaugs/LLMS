@@ -37,7 +37,7 @@ body {
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 3rem 1.5rem 4rem;
+  padding: 3.75rem 1.5rem 4rem;
 }
 
 .App {
@@ -138,6 +138,7 @@ body {
   border-radius: 10px;
   display: block;
   object-fit: cover;
+  max-width: 100%;
 }
 
 .mini-card p {
@@ -334,6 +335,7 @@ h3 {
 
 .showreel-card video {
   width: 100%;
+  max-width: 100%;
   display: block;
   background: #0b0c12;
   object-fit: cover;
@@ -527,7 +529,7 @@ button:not(:disabled):hover {
 
 @media (max-width: 720px) {
   #root {
-    padding: 2.5rem 1rem 3rem;
+    padding: 2.75rem 1rem 3rem;
   }
 
   .panel-header {
@@ -537,5 +539,9 @@ button:not(:disabled):hover {
 
   .hero-actions {
     align-items: stretch;
+  }
+
+  .primary-link {
+    font-size: 0.95rem;
   }
 }
