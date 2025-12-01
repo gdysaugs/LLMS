@@ -13,10 +13,6 @@ const OAUTH_REDIRECT_URL =
 const HERO_VIDEO = '/media/fusion-result.mp4'
 const FACE_SOURCE = '/media/face-source.jpg'
 const BASE_TRACK = '/media/base-track.mp4'
-const CREATIVE_DEMO = '/media/creative-demo.mp4'
-const VOICE_SRC_LEFT = '/media/voice-source-left.wav'
-const VOICE_SRC_MID = '/media/voice-source-mid.mp3'
-const VOICE_SRC_RIGHT = '/media/voice-source-right.wav'
 
 async function fetchWithRetry(
   url: string,
@@ -86,7 +82,6 @@ type ShowreelClip = {
   titleEn: string
   titleJa: string
   desc?: string
-  audioSrc: string
 }
 
 const FEATURE_CARDS: FeatureCard[] = [
@@ -122,25 +117,22 @@ const FEATURE_CARDS: FeatureCard[] = [
 
 const SHOWREEL_CLIPS: ShowreelClip[] = [
   {
-    src: CREATIVE_DEMO,
-    titleEn: 'Script + lip-sync (cloned voice sample)',
-    titleJa: 'クローン声でセリフを差し替えた例',
-    desc: 'Cloned from a 1-second sample and synced to a new script.',
-    audioSrc: VOICE_SRC_MID,
+    src: '/media/showreel-left.mp4',
+    titleEn: '1s voice clone + script change',
+    titleJa: '1秒音声で声質コピー＆セリフ変更',
+    desc: 'Existing video, new cloned voice and script applied.',
   },
   {
-    src: '/media/voice-morph-2.mp4',
-    titleEn: 'Voice clone to new language/lines',
-    titleJa: '声質コピーで別の言語・台本へ',
-    desc: 'Short voice transferred to a new phrase with natural lip motion.',
-    audioSrc: VOICE_SRC_LEFT,
+    src: '/media/showreel-mid.mp4',
+    titleEn: 'Emotional Japanese read',
+    titleJa: '日本語特化の感情的読み上げでセリフ改変',
+    desc: 'Emotion-focused JP delivery with modified lines.',
   },
   {
-    src: HERO_VIDEO,
-    titleEn: 'Voice cloning for any input / Works in EN & JA',
-    titleJa: 'どんな音声からでも声質コピーし日英対応で仕上げ',
-    desc: 'Match tone from any sample and output in English or Japanese.',
-    audioSrc: VOICE_SRC_RIGHT,
+    src: '/media/showreel-right.mp4',
+    titleEn: 'Face merge + script change',
+    titleJa: '顔合成＋セリフ変更の例',
+    desc: 'Face swapped from a photo and script replaced.',
   },
 ]
 
@@ -786,10 +778,6 @@ function App() {
                 <strong>{clip.titleEn}</strong>
                 <span>{clip.titleJa}</span>
                 {clip.desc && <small className="muted-text">{clip.desc}</small>}
-                <audio controls preload="auto" className="audio-inline">
-                  <source src={clip.audioSrc} />
-                  Your browser does not support audio playback.
-                </audio>
               </div>
             </div>
           ))}
