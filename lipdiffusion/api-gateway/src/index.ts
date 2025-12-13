@@ -26,6 +26,46 @@ export default {
       return withCors(Response.json({ status: "ok" }), origin);
     }
 
+    // R2 (presigned) オブジェクトを CORS 付きでプロキシ
+    if (url.pathname === "/r2-proxy") {
+      const target = url.searchParams.get("url");
+      if (!target) {
+        return withCors(Response.json({ error: "missing_url" }, { status: 400 }), origin);
+      }
+
+      try {
+        const method = request.method.toUpperCase();
+        const isBody = method !== "GET" && method !== "HEAD";
+        const upstream = await fetch(target, {
+          method,
+          headers: request.headers,
+          body: isBody ? request.body : null,
+        });
+        const headers = new Headers();
+        const contentType = upstream.headers.get("Content-Type");
+        const contentLength = upstream.headers.get("Content-Length");
+        if (contentType) headers.set("Content-Type", contentType);
+        if (contentLength) headers.set("Content-Length", contentLength);
+
+        return withCors(
+          new Response(upstream.body, {
+            status: upstream.status,
+            statusText: upstream.statusText,
+            headers,
+          }),
+          origin,
+        );
+      } catch (error) {
+        return withCors(
+          Response.json(
+            { error: "proxy_failed", detail: error instanceof Error ? error.message : String(error) },
+            { status: 502 },
+          ),
+          origin,
+        );
+      }
+    }
+
     if (url.pathname.startsWith("/fastapi")) {
       const base = (env.FASTAPI_BASE_URL || "").replace(/\/$/, "");
       if (!base) {
@@ -93,7 +133,7 @@ export default {
 function corsHeaders(origin: string | null) {
   const headers = new Headers();
   headers.set("Access-Control-Allow-Origin", origin ?? "*");
-  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Authorization,Content-Type");
   headers.set("Access-Control-Allow-Credentials", "true");
   return headers;

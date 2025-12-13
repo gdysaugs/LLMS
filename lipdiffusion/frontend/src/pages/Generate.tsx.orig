@@ -1,0 +1,440 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+type Candidate = {
+  id: string
+  label: string
+  start: number
+  end: number
+  url?: string
+}
+
+type GenerationStatus = 'idle' | 'preparing' | 'ready' | 'submitting' | 'done' | 'error'
+
+const formatTime = (s: number) => {
+  if (Number.isNaN(s) || !Number.isFinite(s)) return '0.0s'
+  return `${s.toFixed(1)}s`
+}
+
+export function Generate() {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  const API_BASE = useMemo(
+    () => (import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/api'),
+    [],
+  )
+  const API_KEY = import.meta.env.VITE_API_KEY
+
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [duration, setDuration] = useState<number>(0)
+  const [trimStart, setTrimStart] = useState<number>(0)
+  const [trimEnd, setTrimEnd] = useState<number>(0)
+  const [currentTime, setCurrentTime] = useState<number>(0)
+  const [capturedFrame, setCapturedFrame] = useState<string | null>(null)
+  const [scriptText, setScriptText] = useState<string>('')
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
+  const [status, setStatus] = useState<GenerationStatus>('idle')
+  const [message, setMessage] = useState<string>('')
+  const [loadingCandidates, setLoadingCandidates] = useState<boolean>(false)
+  const [isPlaying, setIsPlaying] = useState<boolean>(false)
+  const [previewingTrim, setPreviewingTrim] = useState<boolean>(false)
+
+  useEffect(() => {
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl)
+      }
+    }
+  }, [videoUrl])
+
+  const handleFile = (file: File | null) => {
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    setVideoFile(file)
+    setVideoUrl(url)
+    setDuration(0)
+    setTrimStart(0)
+    setTrimEnd(0)
+    setCurrentTime(0)
+    setCapturedFrame(null)
+    setCandidates([])
+    setSelectedCandidate(null)
+    setStatus('preparing')
+    setMessage('')
+  }
+
+  const onLoadedMetadata = () => {
+    if (!videoRef.current) return
+    const dur = videoRef.current.duration
+    setDuration(dur)
+    setTrimStart(0)
+    setTrimEnd(dur)
+    setStatus('ready')
+  }
+
+  const onTimeUpdate = () => {
+    if (!videoRef.current) return
+    const t = videoRef.current.currentTime
+    setCurrentTime(t)
+    if (previewingTrim && t >= trimEnd) {
+      videoRef.current.pause()
+      videoRef.current.currentTime = trimStart
+      setIsPlaying(false)
+      setPreviewingTrim(false)
+    }
+  }
+
+  const captureFrame = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    const dataUrl = canvas.toDataURL('image/png')
+    setCapturedFrame(dataUrl)
+  }
+
+  const suggestedCandidates = useMemo(() => {
+    if (!duration || trimEnd <= trimStart) return []
+    const maxCandidates = 5
+    const totalSpan = trimEnd - trimStart
+    const chunk = Math.min(5, Math.max(totalSpan / maxCandidates, 1))
+    const list: Candidate[] = []
+    let cursor = trimStart
+    let idx = 1
+    while (cursor < trimEnd && list.length < maxCandidates) {
+      const end = Math.min(cursor + chunk, trimEnd)
+      list.push({
+        id: `c${idx}`,
+        label: `候補${idx}`,
+        start: cursor,
+        end,
+        url: undefined,
+      })
+      cursor = end + 0.2
+      idx += 1
+    }
+    return list
+  }, [trimEnd, trimStart, duration])
+
+  const togglePlay = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (isPlaying) {
+      video.pause()
+      setIsPlaying(false)
+    } else {
+      video
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => console.error(err))
+    }
+  }
+
+  const seekTo = (time: number) => {
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = time
+    setCurrentTime(time)
+  }
+
+  const previewTrim = () => {
+    const video = videoRef.current
+    if (!video) return
+    video.currentTime = trimStart
+    setPreviewingTrim(true)
+    video
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch((err) => {
+        setPreviewingTrim(false)
+        console.error(err)
+      })
+  }
+
+  const generateCandidates = async () => {
+    if (!videoFile || !duration) {
+      setMessage('動画をアップロードしてください。')
+      return
+    }
+    // ローカル候補を即時表示
+    setCandidates(suggestedCandidates)
+    setSelectedCandidate(suggestedCandidates[0]?.id ?? null)
+    setMessage('無音を除いた候補をざっくり作成しました。バックエンドでも最適化中です。')
+
+    // バックエンドに問い合わせて、最適化候補があれば置き換える
+    try {
+      setLoadingCandidates(true)
+      const form = new FormData()
+      form.append('video', videoFile)
+      form.append('trim_start', String(trimStart))
+      form.append('trim_end', String(trimEnd))
+      if (capturedFrame) {
+        form.append('frame_capture', capturedFrame)
+      }
+
+      const res = await fetch(`${API_BASE}/audio-candidates`, {
+        method: 'POST',
+        headers: API_KEY ? { Authorization: `Bearer ${API_KEY}` } : undefined,
+        body: form,
+      })
+      if (!res.ok) {
+        throw new Error(`候補生成に失敗しました (${res.status})`)
+      }
+      const data = await res.json()
+      const backendCandidates: Candidate[] = Array.isArray(data?.candidates)
+        ? data.candidates.map((c: any, idx: number) => ({
+            id: c.id ?? `bk-${idx + 1}`,
+            label: c.label ?? `候補${idx + 1}`,
+            start: Number(c.start) || 0,
+            end: Number(c.end) || 0,
+            url: c.url,
+          }))
+        : []
+      if (backendCandidates.length > 0) {
+        setCandidates(backendCandidates)
+        setSelectedCandidate(backendCandidates[0].id)
+        setMessage('バックエンドから最適化した候補を取得しました。')
+      }
+    } catch (error) {
+      console.error('[audio-candidates] failed', error)
+      setMessage('候補生成のバックエンド呼び出しに失敗しました（ローカル候補を使用します）。')
+    } finally {
+      setLoadingCandidates(false)
+    }
+  }
+
+  const submit = async () => {
+    if (!videoFile) {
+      setMessage('動画をアップロードしてください。')
+      return
+    }
+    if (!selectedCandidate) {
+      setMessage('音声候補を選択してください。')
+      return
+    }
+    setStatus('submitting')
+      setMessage('生成を開始しています…')
+    const candidate = candidates.find((c) => c.id === selectedCandidate)
+    try {
+      const form = new FormData()
+      form.append('video', videoFile)
+      form.append('trim_start', String(trimStart))
+      form.append('trim_end', String(trimEnd))
+      if (capturedFrame) {
+        form.append('frame_capture', capturedFrame)
+      }
+      if (scriptText.trim().length > 0) {
+        form.append('script_text', scriptText.trim())
+      }
+      if (candidate) {
+        form.append('audio_candidate_id', candidate.id)
+        form.append('audio_candidate_start', String(candidate.start))
+        form.append('audio_candidate_end', String(candidate.end))
+        if (candidate.url) form.append('audio_candidate_url', candidate.url)
+      }
+
+      const res = await fetch(`${API_BASE}/generate`, {
+        method: 'POST',
+        headers: API_KEY ? { Authorization: `Bearer ${API_KEY}` } : undefined,
+        body: form,
+      })
+      if (!res.ok) throw new Error(`生成リクエストに失敗しました (${res.status})`)
+      const data = await res.json()
+      console.info('[generate] response', data)
+      setStatus('done')
+      setMessage('生成リクエストを送信しました。ジョブ完了までお待ちください。')
+    } catch (error) {
+      console.error('[generate] failed', error)
+      setStatus('error')
+      setMessage('生成の送信に失敗しました。APIの設定を確認してください。')
+    }
+  }
+
+  return (
+    <div className="generate-root">
+      <header className="generate-header">
+        <div className="logo">LipDiffusion Studio</div>
+        <nav className="generate-nav">
+          <a href="/">ホーム</a>
+          <a href="/generate" aria-current="page">
+            生成
+          </a>
+        </nav>
+      </header>
+
+      <main className="generate-main">
+        <section className="panel">
+          <div className="panel-title">1. 動画をアップロード</div>
+          <p className="panel-sub">
+            ベース動画をアップロードしてください。長すぎる場合は後続ステップでトリミングします。
+          </p>
+          <label className="upload-tile">
+            <input
+              type="file"
+              accept="video/*"
+              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+            />
+            <span>{videoFile ? videoFile.name : '動画ファイルを選択'}</span>
+          </label>
+      {videoUrl && (
+        <div className="video-wrapper">
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            controls
+            onLoadedMetadata={onLoadedMetadata}
+            onTimeUpdate={onTimeUpdate}
+          />
+          <div className="meta">
+            <span>長さ: {formatTime(duration)}</span>
+            <span>現在: {formatTime(currentTime)}</span>
+          </div>
+        </div>
+      )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-title">2. トリミング & ベストフレーム</div>
+          <p className="panel-sub">
+            開始・終了位置をスライダーで調整し、口元がよく見えるフレームをキャプチャしてください。
+          </p>
+          <div className="trim-controls">
+            <div className="playback-row">
+              <button type="button" onClick={togglePlay} disabled={!videoUrl}>
+                {isPlaying ? '一時停止' : '再生'}
+              </button>
+              <button type="button" onClick={() => seekTo(trimStart)} disabled={!videoUrl}>
+                開始へジャンプ
+              </button>
+              <button type="button" onClick={previewTrim} disabled={!videoUrl}>
+                選択区間を再生
+              </button>
+              <div className="timeline">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step="0.05"
+                  value={currentTime}
+                  onChange={(e) => seekTo(Number(e.target.value))}
+                />
+                <div className="timeline-meta">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="row">
+              <label>
+                開始 {formatTime(trimStart)}
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step="0.1"
+                  value={trimStart}
+                  onChange={(e) => setTrimStart(Math.min(Number(e.target.value), trimEnd - 0.1))}
+                />
+              </label>
+              <label>
+                終了 {formatTime(trimEnd)}
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step="0.1"
+                  value={trimEnd}
+                  onChange={(e) => setTrimEnd(Math.max(Number(e.target.value), trimStart + 0.1))}
+                />
+              </label>
+            </div>
+            <div className="trim-readout">
+              <div>開始 {formatTime(trimStart)}</div>
+              <div>終了 {formatTime(trimEnd)}</div>
+              <div>長さ {formatTime(trimEnd - trimStart)}</div>
+            </div>
+            <div className="capture-row">
+              <button type="button" onClick={captureFrame} disabled={!videoUrl}>
+                現在フレームをキャプチャ
+              </button>
+              {capturedFrame && (
+                <div className="frame-preview">
+                  <img src={capturedFrame} alt="Captured frame" />
+                </div>
+              )}
+            </div>
+            <canvas ref={canvasRef} className="hidden-canvas" />
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-title">3. 音声候補の自動抽出</div>
+          <p className="panel-sub">
+            ffmpeg で無音を除去しながら複数候補を切り出す想定です。ここではプレビュー用に自動で候補を提案します。
+          </p>
+          <div className="candidate-actions">
+            <button type="button" onClick={generateCandidates} disabled={!videoFile || !duration}>
+              {loadingCandidates ? '候補生成中...' : '音声候補をつくる'}
+            </button>
+          </div>
+          <div className="candidate-grid">
+            {candidates.map((c) => (
+              <label key={c.id} className={`candidate ${selectedCandidate === c.id ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="candidate"
+                  value={c.id}
+                  checked={selectedCandidate === c.id}
+                  onChange={() => setSelectedCandidate(c.id)}
+                />
+                <div className="candidate-body">
+                  <div className="candidate-title">{c.label}</div>
+                  <div className="candidate-time">
+                    {formatTime(c.start)} - {formatTime(c.end)}
+                  </div>
+                  <div className="candidate-note">無音カット済み / 自動抽出想定</div>
+                  {c.url && (
+                    <audio controls src={c.url} className="candidate-audio" preload="none">
+                      お使いのブラウザでは再生できません
+                    </audio>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-title">4. 生成</div>
+          <p className="panel-sub">
+            「生成」を押すとペイロードを構築します。バックエンドの RunPod / Gradio エンドポイントと結線して利用してください。
+          </p>
+          <div className="field">
+            <label htmlFor="script-text">セリフ（Gradioのテキスト入力欄相当）</label>
+            <textarea
+              id="script-text"
+              placeholder="ここにセリフ／台本を入力してください"
+              value={scriptText}
+              onChange={(e) => setScriptText(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <div className="actions">
+            <button type="button" onClick={submit} disabled={status === 'submitting'}>
+              生成
+            </button>
+            {status === 'done' && <span className="pill success">ペイロード準備完了</span>}
+            {status === 'error' && <span className="pill error">エラー</span>}
+          </div>
+          {message && <div className="hint">{message}</div>}
+        </section>
+      </main>
+    </div>
+  )
+}
