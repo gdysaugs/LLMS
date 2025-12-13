@@ -195,15 +195,6 @@ export function Generate() {
     return put
   }
 
-  const warmupTarget = async (target: 'sovits' | 'wav2lip') => {
-    try {
-      await fetchWithRetry(`${API_BASE}/warmup?target=${target}`, { method: 'POST', headers: serviceHeaders }, 1, 400)
-      appendLog(`${target.toUpperCase()} をウォームアップしました`)
-    } catch {
-      appendLog(`${target.toUpperCase()} ウォームアップに失敗しましたが続行します`)
-    }
-  }
-
   const consumeTicket = async (email: string): Promise<string> => {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -309,7 +300,7 @@ export function Generate() {
       appendLog('生成動画をローカル再生用に読み込みました')
     } catch (err) {
       setResultObjectUrl(null)
-      appendLog('動画を直接再生します（CORSで失敗した場合はリンクをクリックしてください）')
+      appendLog('動画を直接再生します（取得に失敗した場合はリンクをクリックしてください）')
     }
   }
 
@@ -342,22 +333,17 @@ export function Generate() {
     }
 
     setIsRunning(true)
-    appendLog('生成を開始します')
+      appendLog('生成を開始します')
 
     let usageId: string | null = null
 
     try {
-      // Warmup: 即座に SoVITS、15秒後に Wav2Lip
-      await warmupTarget('sovits')
-      setTimeout(() => {
-        void warmupTarget('wav2lip')
-      }, 15000)
       setStatus('uploading')
-      appendLog('R2 に動画をアップロードしています')
+      appendLog('ストレージに動画をアップロードしています')
       const videoPresign = await presignUpload(videoFile, 'uploads/video')
       await uploadToPresigned(videoFile, videoPresign.uploadUrl)
 
-      appendLog('R2 に音声をアップロードしています')
+      appendLog('ストレージに音声をアップロードしています')
       const audioPresign = await presignUpload(audioFile, 'uploads/audio')
       await uploadToPresigned(audioFile, audioPresign.uploadUrl)
 
@@ -486,7 +472,7 @@ export function Generate() {
         <section className="panel">
           <div className="panel-header">
             <h2>素材をアップロード</h2>
-            <span className="pill">R2 アップロード → SoVITS → Wav2Lip</span>
+            <span className="pill">アップロード → 音声合成 → 口パク生成</span>
           </div>
           <div className="upload-grid">
             <label className="upload-box">
@@ -506,7 +492,7 @@ export function Generate() {
               <input
                 ref={audioInputRef}
                 type="file"
-                accept="audio/*"
+                accept="audio/*,.mp3,.m4a,.wav,.aac"
                 onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
               />
               <div className="upload-meta">
@@ -515,7 +501,7 @@ export function Generate() {
             </label>
           </div>
           <div className="field">
-            <label htmlFor="script-text">セリフ / 台本（SoVITS で合成して Wav2Lip に渡します）</label>
+            <label htmlFor="script-text">セリフ / 台本（音声合成して口パク生成に渡します）</label>
             <textarea
               id="script-text"
               placeholder="ここにセリフ／台本を入力してください"
@@ -525,8 +511,8 @@ export function Generate() {
             />
           </div>
           <p className="muted">
-            「生成」を押すと /warmup → R2 アップロード → /tickets/consume → /run → /status を順に実行します。
-            failed to fetch が出た場合は自動リトライします。
+            「生成」を押すと準備→素材アップロード→チケット確認→生成→完了チェックを自動で進めます。
+            通信失敗時は自動リトライします。
           </p>
           <div className="actions">
             <button type="button" onClick={handleGenerate} disabled={!canGenerate}>
@@ -564,7 +550,7 @@ export function Generate() {
                 src={resultObjectUrl ?? resultUrl ?? undefined}
                 controls
                 playsInline
-                style={{ width: '100%', borderRadius: '14px' }}
+                style={{ width: '100%', maxWidth: '520px', borderRadius: '14px', display: 'block', margin: '0 auto' }}
               />
               <p className="muted">
                 ソースURL: <a href={resultUrl ?? resultObjectUrl ?? '#'}>{resultUrl ?? resultObjectUrl}</a>
