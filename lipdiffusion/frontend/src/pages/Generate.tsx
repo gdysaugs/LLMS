@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, isAuthConfigured } from '../lib/supabaseClient'
 
@@ -48,6 +49,7 @@ async function fetchWithRetry(
 }
 
 export function Generate() {
+  const location = useLocation()
   const videoInputRef = useRef<HTMLInputElement | null>(null)
   const audioInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -145,6 +147,15 @@ export function Generate() {
     }
     void fetchBilling(session)
   }, [API_BASE, session])
+
+  // 受け渡し音声（/trim などから遷移）
+  useEffect(() => {
+    const imported = (location.state as any)?.importedAudio as File | undefined
+    if (imported) {
+      setAudioFile(imported)
+      setLogs((prev) => [...prev, `[${formatTime()}] トリム済みの音声を読み込みました (${imported.name})`])
+    }
+  }, [location.state])
 
   useEffect(() => {
     return () => {
