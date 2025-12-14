@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import './generate.css'
 
 type ChatMessage = {
@@ -6,7 +6,7 @@ type ChatMessage = {
   content: string
 }
 
-const defaultApi = import.meta.env.VITE_LLM_API_URL ?? ''
+const defaultApi = import.meta.env.VITE_LLM_API_URL ?? 'https://api-gateway.adamadams567890.workers.dev/llama/run'
 
 const buildPrompt = (name: string, role: string, traits: string, style: string, boundaries: string) => {
   const safeName = name || 'キャラクター'
