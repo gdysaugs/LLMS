@@ -1,18 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import './index.css'
-import App from './App.tsx'
-import { Generate } from './pages/Generate.tsx'
-import { Trim } from './pages/Trim.tsx'
+﻿import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
+import "./index.css"
+import { Generate } from "./pages/Generate.tsx"
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/" element={<Generate />} />
         <Route path="/generate" element={<Generate />} />
-        <Route path="/trim" element={<Trim />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
