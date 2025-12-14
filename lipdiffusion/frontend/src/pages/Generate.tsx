@@ -23,6 +23,12 @@ const formatTime = () => {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+const sanitizeScript = (text: string) => {
+  // 「？」は保持し、それ以外の記号を「。」に置換
+  const replaced = text.replace(/[!！？♡♥⭐️☆★🌟💖💗💓💘💝💕💞💟❤❤️❣️•・….,、;；:：]/g, '。')
+  return replaced.replace(/。+/g, '。').trim()
+}
+
 async function fetchWithRetry(
   url: string,
   options: RequestInit = {},
@@ -83,6 +89,7 @@ export function Generate() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [scriptText, setScriptText] = useState('')
+  const [sovitsSpeed, setSovitsSpeed] = useState<number>(1.3)
 
   const [isRunning, setIsRunning] = useState(false)
   const [status, setStatus] = useState<'idle' | 'preparing' | 'uploading' | 'running' | 'success' | 'error'>('idle')
@@ -91,6 +98,22 @@ export function Generate() {
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
   const [taskId, setTaskId] = useState<string | null>(null)
+  const [showPresets, setShowPresets] = useState(false)
+  const audioPresets = [
+    { label: '少年系', url: '/presets/boy.m4a', filename: 'preset_boy.m4a' },
+    { label: 'かわいい女の子', url: '/presets/cute_girl.wav', filename: 'preset_cute_girl.wav' },
+    { label: 'お姉さん', url: '/presets/oneesan.m4a', filename: 'preset_oneesan.m4a' },
+    { label: '高音女性', url: '/presets/high_female.m4a', filename: 'preset_high_female.m4a' },
+    { label: '低音女性', url: '/presets/low_female.m4a', filename: 'preset_low_female.m4a' },
+    { label: '鳴き声＆喘ぎ声', url: '/presets/nakigoe.mp3', filename: 'preset_nakigoe.mp3' },
+    { label: '元気な女の子', url: '/presets/energetic_girl.mp3', filename: 'preset_energetic_girl.mp3' },
+    { label: 'メスガキ', url: '/presets/mesugaki.mp3', filename: 'preset_mesugaki.mp3' },
+  ]
+  const videoPresets = [
+    { label: 'サンプル動画 1 (無音)', url: '/presets/sample_video_1.mp4', filename: 'sample_video_1.mp4' },
+    { label: 'サンプル動画 2 (無音)', url: '/presets/sample_video_2.mp4', filename: 'sample_video_2.mp4' },
+    { label: 'サンプル動画 3 (無音)', url: '/presets/sample_video_3.mp4', filename: 'sample_video_3.mp4' },
+  ]
 
   const appendLog = (message: string) => {
     setLogs((prev) => [...prev, `[${formatTime()}] ${message}`])
@@ -154,6 +177,17 @@ export function Generate() {
     if (imported) {
       setAudioFile(imported)
       setLogs((prev) => [...prev, `[${formatTime()}] トリム済みの音声を読み込みました (${imported.name})`])
+    }
+  }, [location.state])
+
+  useEffect(() => {
+    const importedVideo = (location.state as any)?.importedVideo as File | undefined
+    if (importedVideo) {
+      setVideoFile(importedVideo)
+      setLogs((prev) => [
+        ...prev,
+        `[${formatTime()}] トリム済みの動画を読み込みました (${importedVideo.name})`,
+      ])
     }
   }, [location.state])
 
@@ -296,6 +330,16 @@ export function Generate() {
     )
   }
 
+  const logStagesIfAvailable = (record: TaskRecord) => {
+    const result = record.result || {}
+    if (result?.sovits?.output_url) {
+      appendLog('音声合成が完了しました')
+    }
+    if (result?.wav2lip?.output_url || result?.wav2lip_output_url) {
+      appendLog('口パク生成が完了しました')
+    }
+  }
+
   const loadResultVideo = async (url: string) => {
     // プロキシ経由で取得し、blob URL を作って video に設定する（CORS/Range 回避）
     const proxied = proxyUrl(url)
@@ -321,6 +365,7 @@ export function Generate() {
     setResultUrl(null)
     setResultObjectUrl(null)
     setTaskId(null)
+    const sanitizedScript = sanitizeScript(scriptText || '')
 
     if (!isAuthConfigured || !supabase) {
       setError('Supabase が未設定です。環境変数を確認してください。')
@@ -364,9 +409,10 @@ export function Generate() {
       const payload: Record<string, any> = {
         target_key: videoPresign.key,
         audio_key: audioPresign.key,
-        script_text: scriptText.trim() || undefined,
+        script_text: sanitizedScript || undefined,
         source_keys: [],
         retain_intermediate: true,
+        sovits: { speed: sovitsSpeed, temperature: 1.0 },
       }
       appendLog('生成ジョブを送信します')
       const maybeTaskId = await startPipeline(payload)
@@ -395,6 +441,7 @@ export function Generate() {
       appendLog(`ジョブID: ${maybeTaskId} を監視します`)
 
       const record = await pollTask(maybeTaskId)
+      logStagesIfAvailable(record)
       const outputUrl = extractOutputUrl(record)
       if (!outputUrl) {
         throw new Error('生成結果のURLが取得できませんでした')
@@ -434,6 +481,35 @@ export function Generate() {
 
   const isAuthenticated = Boolean(session?.user)
   const canGenerate = isAuthenticated && !isRunning
+
+  const handlePreset = async (presetUrl: string, filename: string) => {
+    try {
+      const res = await fetch(presetUrl)
+      const blob = await res.blob()
+      const file = new File([blob], filename, { type: blob.type || 'audio/mp3' })
+      setAudioFile(file)
+      appendLog(`プリセット音声を読み込みました (${filename})`)
+    } catch (err) {
+      appendLog('プリセットの読み込みに失敗しました')
+    }
+  }
+
+  const previewPreset = (presetUrl: string) => {
+    const audio = new Audio(presetUrl)
+    void audio.play()
+  }
+
+  const handleVideoPreset = async (presetUrl: string, filename: string) => {
+    try {
+      const res = await fetch(presetUrl)
+      const blob = await res.blob()
+      const file = new File([blob], filename, { type: blob.type || 'video/mp4' })
+      setVideoFile(file)
+      appendLog(`サンプル動画を読み込みました (${filename})`)
+    } catch (err) {
+      appendLog('サンプル動画の読み込みに失敗しました')
+    }
+  }
 
   return (
     <div className="generate-root">
@@ -503,7 +579,7 @@ export function Generate() {
               <input
                 ref={audioInputRef}
                 type="file"
-                accept="audio/*,.mp3,.m4a,.wav,.aac"
+                accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg"
                 onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
               />
               <div className="upload-meta">
@@ -511,6 +587,55 @@ export function Generate() {
               </div>
             </label>
           </div>
+          <div className="field">
+            <button
+              type="button"
+              className="pill"
+              style={{ color: '#e5e7f5' }}
+              onClick={() => setShowPresets((v) => !v)}
+            >
+              {showPresets ? '▼ サンプルを隠す' : '▶ サンプル音声・動画を表示'}
+            </button>
+          </div>
+          {showPresets && (
+            <>
+              <div className="upload-grid" style={{ marginTop: '12px' }}>
+                {audioPresets.map((p) => (
+                  <div key={p.url} className="upload-box" style={{ padding: '12px' }}>
+                    <div className="upload-title">{p.label}</div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <button type="button" onClick={() => handlePreset(p.url, p.filename)} className="pill">
+                        使用する
+                      </button>
+                      <button type="button" onClick={() => previewPreset(p.url)} className="pill">
+                        再生
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="upload-grid" style={{ marginTop: '12px' }}>
+                {videoPresets.map((p) => (
+                  <div key={p.url} className="upload-box" style={{ padding: '12px' }}>
+                    <div className="upload-title">{p.label}</div>
+                    <video
+                      src={p.url}
+                      controls
+                      playsInline
+                      muted
+                      loop
+                      style={{ width: '100%', borderRadius: '8px', marginTop: '8px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <button type="button" onClick={() => handleVideoPreset(p.url, p.filename)} className="pill">
+                        使用する
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
           <div className="field">
             <label htmlFor="script-text">セリフ / 台本（音声合成して口パク生成に渡します）</label>
             <textarea
@@ -520,6 +645,19 @@ export function Generate() {
               onChange={(e) => setScriptText(e.target.value)}
               rows={4}
             />
+          </div>
+          <div className="field">
+            <label htmlFor="sovits-speed">読み上げ速度 (1.3 - 2.0)</label>
+            <input
+              id="sovits-speed"
+              type="range"
+              min="1.3"
+              max="2"
+              step="0.1"
+              value={sovitsSpeed}
+              onChange={(e) => setSovitsSpeed(parseFloat(e.target.value))}
+            />
+            <div className="muted">現在: {sovitsSpeed.toFixed(1)}x（デフォルト 1.3）</div>
           </div>
           <p className="muted">
             「生成」を押すと準備→素材アップロード→チケット確認→生成→完了チェックを自動で進めます。
@@ -561,7 +699,7 @@ export function Generate() {
                 src={resultObjectUrl ?? resultUrl ?? undefined}
                 controls
                 playsInline
-                style={{ width: '100%', maxWidth: '520px', borderRadius: '14px', display: 'block', margin: '0 auto' }}
+                style={{ width: '100%', maxWidth: '420px', borderRadius: '14px', display: 'block', margin: '0 auto' }}
               />
               <p className="muted">
                 ソースURL: <a href={resultUrl ?? resultObjectUrl ?? '#'}>{resultUrl ?? resultObjectUrl}</a>
