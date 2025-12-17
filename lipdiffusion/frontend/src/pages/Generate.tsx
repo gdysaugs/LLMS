@@ -60,7 +60,7 @@ export function Generate() {
 
   const [sovitsStatus, setSovitsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [sovitsMessage, setSovitsMessage] = useState('')
-  const [sovitsSpeed, setSovitsSpeed] = useState<number>(1.2)
+  const [sovitsSpeed] = useState<number>(1.0)
   const [taskId, setTaskId] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
@@ -580,21 +580,9 @@ Do not break character. Do not include translation or romaji.`
           <div className="field">
             <span>オプション (固定値 / UI簡略)</span>
             <div className="muted">
-              言語: ja / 速度: {sovitsSpeed.toFixed(1)} / temperature:1.0 / top_p:1.0 / sample_steps:8 / prosody: off /
+              言語: ja / 速度: {sovitsSpeed.toFixed(1)} (固定) / temperature:1.0 / top_p:1.0 / sample_steps:8 / prosody: off /
               cut: punctuation
             </div>
-          </div>
-          <div className="field">
-            <label htmlFor="speed">話速</label>
-            <input
-              id="speed"
-              type="range"
-              min="1.0"
-              max="2.0"
-              step="0.1"
-              value={sovitsSpeed}
-              onChange={(e) => setSovitsSpeed(parseFloat(e.target.value))}
-            />
           </div>
           <button type="button" className="primary" onClick={handleSovits} disabled={sovitsStatus === 'loading'}>
             {sovitsStatus === 'loading' ? '合成中...' : 'ASMR音声を生成する'}
