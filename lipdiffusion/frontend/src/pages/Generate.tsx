@@ -26,65 +26,6 @@ const sanitizeScript = (text: string) => {
 
 const defaultModelPath = '/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf'
 
-const audioBufferToWav = (buffer: AudioBuffer) => {
-  const numOfChan = buffer.numberOfChannels
-  const length = buffer.length * numOfChan * 2 + 44
-  const outBuffer = new ArrayBuffer(length)
-  const view = new DataView(outBuffer)
-
-  const writeString = (viewParam: DataView, offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) {
-      viewParam.setUint8(offset + i, str.charCodeAt(i))
-    }
-  }
-
-  let offset = 0
-
-  writeString(view, offset, 'RIFF')
-  offset += 4
-  view.setUint32(offset, length - 8, true)
-  offset += 4
-  writeString(view, offset, 'WAVE')
-  offset += 4
-  writeString(view, offset, 'fmt ')
-  offset += 4
-  view.setUint32(offset, 16, true)
-  offset += 4
-  view.setUint16(offset, 1, true)
-  offset += 2
-  view.setUint16(offset, numOfChan, true)
-  offset += 2
-  view.setUint32(offset, buffer.sampleRate, true)
-  offset += 4
-  view.setUint32(offset, buffer.sampleRate * numOfChan * 2, true)
-  offset += 4
-  view.setUint16(offset, numOfChan * 2, true)
-  offset += 2
-  view.setUint16(offset, 16, true)
-  offset += 2
-  writeString(view, offset, 'data')
-  offset += 4
-  view.setUint32(offset, length - offset - 4, true)
-  offset += 4
-
-  const channels = []
-  for (let i = 0; i < numOfChan; i++) {
-    channels.push(buffer.getChannelData(i))
-  }
-
-  let sample = 0
-  while (sample < buffer.length) {
-    for (let channel = 0; channel < numOfChan; channel++) {
-      const sample16 = Math.max(-1, Math.min(1, channels[channel][sample])) * 0x7fff
-      view.setInt16(offset, sample16, true)
-      offset += 2
-    }
-    sample++
-  }
-
-  return outBuffer
-}
-
 export function Generate() {
   const API_GATEWAY_BASE = useMemo(
     () => import.meta.env.VITE_API_GATEWAY_BASE_URL?.replace(/\/$/, '') ?? null,
@@ -128,55 +69,6 @@ export function Generate() {
 
   const appendLog = (message: string) =>
     setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
-
-  const applyAsmrFilters = async (url: string) => {
-    try {
-      appendLog('ASMR: 音質調整を開始 (ブラウザ処理)')
-      const res = await fetch(url)
-      const array = await res.arrayBuffer()
-      const ctx = new AudioContext()
-      const decoded = await ctx.decodeAudioData(array.slice(0))
-      ctx.close()
-
-      const offline = new OfflineAudioContext(decoded.numberOfChannels, decoded.length, decoded.sampleRate)
-      const source = offline.createBufferSource()
-      source.buffer = decoded
-
-      const highpass = offline.createBiquadFilter()
-      highpass.type = 'highpass'
-      highpass.frequency.value = 90
-
-      const deEss = offline.createBiquadFilter()
-      deEss.type = 'peaking'
-      deEss.frequency.value = 6500
-      deEss.Q.value = 5
-      deEss.gain.value = -6
-
-      const sparkle = offline.createBiquadFilter()
-      sparkle.type = 'highshelf'
-      sparkle.frequency.value = 9000
-      sparkle.gain.value = 3
-
-      const compressor = offline.createDynamicsCompressor()
-      compressor.threshold.value = -22
-      compressor.ratio.value = 2
-      compressor.attack.value = 0.01
-      compressor.release.value = 0.25
-
-      source.connect(highpass).connect(deEss).connect(sparkle).connect(compressor).connect(offline.destination)
-      source.start(0)
-      const rendered = await offline.startRendering()
-
-      const wavBuffer = audioBufferToWav(rendered)
-      const blob = new Blob([wavBuffer], { type: 'audio/wav' })
-      const objUrl = URL.createObjectURL(blob)
-      appendLog('ASMR: 音質調整完了')
-      return objUrl
-    } catch (err) {
-      appendLog(`ASMR: 音質調整スキップ (${err instanceof Error ? err.message : err})`)
-      return null
-    }
-  }
 
   useEffect(() => {
     return () => {
@@ -257,6 +149,7 @@ Do not break character. Do not include translation or romaji.`
       })
       const json = await res.json()
       const text =
+        (json.output?.text as string) ||
         (json.output?.result as string) ||
         (json.result as string) ||
         (json.choices?.[0]?.message?.content as string) ||
@@ -279,6 +172,7 @@ Do not break character. Do not include translation or romaji.`
           const st = await fetch(statusUrl, { headers: { Authorization: ensureApiKey() } })
           const sj = await st.json()
           const content =
+            (sj.output?.text as string) ||
             (sj.output?.result as string) ||
             (sj.result as string) ||
             (sj.choices?.[0]?.message?.content as string) ||
@@ -471,11 +365,10 @@ Do not break character. Do not include translation or romaji.`
       const json = await res.json()
       const url = extractOutputUrl(json)
       if (url) {
-        const processed = await applyAsmrFilters(url)
-        setResultObjectUrl(processed)
+        setResultObjectUrl(null)
         setResultUrl(url)
         setSovitsStatus('success')
-        setSovitsMessage(processed ? '音質調整済み (ASMR)' : '音声生成が完了しました')
+        setSovitsMessage('音声生成が完了しました')
         appendLog('SoVITS: 完了(同期レスポンス)')
         return
       }
@@ -485,11 +378,10 @@ Do not break character. Do not include translation or romaji.`
         setTaskId(id)
         appendLog(`SoVITS: ジョブID ${id}`)
         const finalUrl = await pollSovits(id)
-        const processed = await applyAsmrFilters(finalUrl)
-        setResultObjectUrl(processed)
+        setResultObjectUrl(null)
         setResultUrl(finalUrl)
         setSovitsStatus('success')
-        setSovitsMessage(processed ? '音質調整済み (ASMR)' : '音声生成が完了しました')
+        setSovitsMessage('音声生成が完了しました')
         appendLog('SoVITS: 完了(ステータス)')
         return
       }
