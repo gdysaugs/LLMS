@@ -110,20 +110,69 @@ export default {
       },
     };
 
+    for (const [path, target] of Object.entries(runpodTargets)) {
+      if (url.pathname.startsWith(`${path}/status/`)) {
+        const jobId = url.pathname.slice(`${path}/status/`.length);
+        if (!jobId) {
+          return withCors(Response.json({ error: "missing_job_id" }, { status: 400 }), origin);
+        }
+
+        const statusUrl = `${target.url}/status/${jobId}`;
+        const headers = {
+          Authorization: "Bearer " + target.key,
+          "Content-Type": "application/json",
+        };
+        const upstream = await fetch(statusUrl, {
+          method: request.method === "POST" ? "POST" : "GET",
+          headers,
+          body: request.method === "POST" ? request.body : null,
+        });
+
+        return withCors(cloneResponse(upstream), origin);
+      }
+
+      if (request.method === "POST" && url.pathname === `${path}/sync`) {
+        const upstream = await fetch(`${target.url}/runsync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + target.key,
+          },
+          body: request.body,
+        });
+        return withCors(cloneResponse(upstream), origin);
+      }
+    }
+
     if (request.method === "POST" && runpodTargets[url.pathname]) {
       const body = await request.text();
       const target = runpodTargets[url.pathname];
+      if (!target?.url || !target?.key) {
+        return withCors(
+          Response.json({ error: "runpod_not_configured", detail: url.pathname }, { status: 500 }),
+          origin,
+        );
+      }
 
-      const runpodResponse = await fetch(target.url + "/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + target.key,
-        },
-        body,
-      });
-
-      return withCors(cloneResponse(runpodResponse), origin);
+      try {
+        const runpodResponse = await fetch(target.url + "/run", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + target.key,
+          },
+          body,
+        });
+        return withCors(cloneResponse(runpodResponse), origin);
+      } catch (error) {
+        return withCors(
+          Response.json(
+            { error: "runpod_fetch_failed", detail: error instanceof Error ? error.message : String(error) },
+            { status: 502 },
+          ),
+          origin,
+        );
+      }
     }
 
     return withCors(Response.json({ error: "not_found" }, { status: 404 }), origin);

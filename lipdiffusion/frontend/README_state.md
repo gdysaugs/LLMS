@@ -1,77 +1,64 @@
-# 現状メモ (2025-12-14)
+# 現状メモ (2025-12-16)
 
 ## 構成
-- フロント: 
-  - Cloudflare Pages プロジェクト名: 
-  - 直近デプロイ例: , , 
-- バックエンド (FastAPI on RunPod 等): 
-  - SoVITS: 
-  - Wav2Lip: 
-  - FaceFusion/Presign API:  など
-- ストレージ: Cloudflare R2（アップロード/生成結果を保存）。Pagesの静的上限25MBを超えるファイルはR2等に置く。
-- 認証/課金: Supabase Auth + Stripe。ログイン必須、生成ごとにチケット1枚消費（失敗時自動払い戻し）。
+- フロント: Cloudflare Pages プロジェクト `llms`  
+  - 最新プレビュー: https://048aad20.llms-3yk.pages.dev （以降の微修正デプロイ: https://0844641d.llms-3yk.pages.dev, https://891bc3d8.llms-3yk.pages.dev）
+- バックエンド:
+  - Llama (RunPod serverless): `suarez123/llama-worker:20251217-gpu-q6-ctx12288`（CUDA12.2ビルド、CMAKE_CUDA_ARCHITECTURES=70/75/80/86/89/90、起動時GPUヘルスチェック付き、CTX=12288, LLAMA_MAX_TOKENS=3500, モデル Berghof-NSFW-7B.i1-Q6_K.gguf, REQUIRE_GPU=1デフォルト）
+  - 旧タグ: `20251216-gpu-q6-ctx12288`（CUDA12.4ベース） / `20251215-gpu-q6-ctx8192`（CTX=8192, MAX=2500）
+  - SoVITS: `suarez123/sovits-serverless:hscene-20251215o`（ffmpegポストなし、デフォルトprompt_textは空→"んっ！"に強制、ref-free許可）
+  - FaceFusion/Presign API: `suarez123/facefusion-api:20251214-ticket-auth`
+  - Gateway (Workers): `api-gateway.adamadams567890.workers.dev` （/run-llama, /run-sovits, /r2-proxy などをCORS付きでプロキシ）
+- ストレージ: Cloudflare R2（アップロード/生成結果保存）。  
+- 認証/課金: Supabase Auth + Stripe（チケット必須、失敗時は自動リファンド）。
 
-## フロントの挙動
-### Generate ページ
-- 動画/音声アップロード、セリフ入力。サンプル音声/動画はトグルで表示（デフォルト非表示）、動画はページ内で即再生可。
-- SoVITS設定: speedデフォルト1.3（UI 1.3〜2.0）、temperature 1.0。セリフは「？」以外の記号を「。」に正規化。
-- プリセット音声: 少年系(23980)、かわいい女の子、お姉さん、高音/低音女性、鳴き声＆喘ぎ声、元気な女の子、メスガキ。
-- プリセット動画: sample_video_1/2/3（無音、25MB以下に調整）。
-- 進行ログ: 音声合成完了/口パク生成完了を結果から検出して追記。
-- 結果動画は gateway  経由で取得→Blob再生（CORS/Range回避）。
+## フロントの挙動（Generate）
+- キャラ設定 → LLM台本生成 → 参照音声プリセット選択 → SoVITS合成までを1画面で実行。ユーザーアップロードは禁止。
+- 台本生成:
+  - 段落スライダー最大200行、max_tokensは段落数に応じて最大3500（backend MAX=3500に合わせる）。
+  - プロンプトはセリフのみ・モノローグ・数字禁止・括弧/効果音/メタ終端禁止。行頭の数字はフロントで自動除去。
+  - LLMリクエストは `{input: {...}}` 形式。非同期ジョブIDが返った場合は `/run-llama/status/{id}` をポーリング（~10分）。
+  - タイムアウトは10分。
+- 参照音声:
+  - R2に事前配置したプリセットキーから選択（ref-free想定）。アップロードUIなし。
+- SoVITS合成:
+  - 固定オプション（ja/ja, speed=1.2, temperature=1.0, top_p=1.0, sample_steps=8, prosody off, cut=punctuation）。
+  - ステータスURLがあればポーリング。出力URLをオーディオタグで再生。
+  - ffmpegポストエフェクトは入れていない（生WAVを返す）。
+  - フロント側のASMR加工も無し（Web Audio FXを撤去済み）。
+- 認可: Supabaseセッション必須。SoVITS実行時に `/tickets/consume` でチケット1枚必須。
+- ログ: LLM/SoVITS進行をログに表示。
 
-### Trim ページ
-- 動画を読み込むと音声のみ抽出し波形トリム（動画トリムなし）。ffmpeg.wasmで抽出＋ノイズ除去（highpass/lowpass/afftdn/acompressor）。
-- ズーム機能は廃止し、波形を常に画面幅にフィットさせ、横はみ出し・ガタつきを抑制。
+## API / Gateway
+- `/storage/presign`（FastAPI経由）: intent=upload/get, expires_in=900。Authorization: Bearer <FF_API_SECRET>, X-Api-Key 同値。
+- `/run-llama` / `/run-llama/status/{id}`: RunPod Llama をプロキシ。
+- `/run-sovits` / `/run-sovits/status/{id}`: RunPod SoVITS をプロキシ。
+- `/r2-proxy`: R2オブジェクトをCORS付きで中継。
 
-## API（主要）
-- POST  : R2署名付きURL取得（intent=upload、expires_in=900）。
-- POST  : 生成ジョブ開始（返り値 task_id または output_url）。
-- GET   : ジョブ状態/結果取得。
-- POST  /  : チケット操作。
-- POST  : プレビュー用H.264変換（現在フロントでは未使用）。
-
-## 環境変数（Pages例）
+## 環境変数（Pages）
 - VITE_API_BASE_URL=https://api.lipdiffusion.uk/fastapi
 - VITE_API_GATEWAY_BASE_URL=https://api-gateway.adamadams567890.workers.dev
-- VITE_API_KEY=<サービスキー>
-- VITE_TICKET_TOKEN=<チケット用シークレット>
-- VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
+- VITE_API_KEY=<FF_API_SECRET と同じサービスキー>  ※Preview/Production両方に設定。ローカルビルド時もexportが必要。
+- VITE_LLM_MODEL_PATH=/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf
+- VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY （認証を使う場合）
+- VITE_LLM_API_URL / VITE_SOVITS_RUN_URL / VITE_SOVITS_STATUS_URL は未設定なら gateway 経由を自動利用。
 
 ## セキュリティ/運用
-- ログイン必須＋チケット必須。未ログイン/残高不足はエラー。
-- R2への直接再生は避け、gateway  経由でCORS/Range対策。
-- Cloudflareで /run /status /storage /generate /r2-proxy 等にレート制限（例: 10秒30リクエスト）を設定。
-- セリフの記号正規化で異常文字によるエラーを低減。
-- Pages 25MB制限は変更不可。大容量プリセットはR2等に置くこと。
+- LLM/SoVITSへの直接呼び出しはすべて gateway 経由（CORS許可）。CF Access/共有キーで保護。
+- R2は presign 経由。ファイル再生は /r2-proxy でCORS/Range対策。
+- Cloudflare レート制限: /run /status /storage /generate /r2-proxy 等に設定推奨。
+- Pages 25MB制限は回避不可。大きいプリセットはR2へ。
 
-## デプロイ（WSL）
+## デプロイ（WSLでローカルビルドする場合）
+```bash
+export VITE_API_BASE_URL=https://api.lipdiffusion.uk/fastapi
+export VITE_API_KEY=<FF_API_SECRETと同じ値>
+# 必要なら VITE_API_GATEWAY_BASE_URL なども export
+npm run build
+npx wrangler pages deploy dist --project-name llms --commit-dirty=true
+```
 
-> frontend@0.0.0 build
-> tsc -b && vite build
-
-vite v7.2.2 building client environment for production...
-transforming...
-✓ 128 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/index.html                   0.46 kB │ gzip:   0.29 kB
-dist/assets/worker-BAOIWoxA.js    2.53 kB
-dist/assets/index-B-FBcpF7.css   10.64 kB │ gzip:   2.85 kB
-dist/assets/index-C8BB1kci.js   490.85 kB │ gzip: 144.81 kB
-✓ built in 1.64s
-
- ⛅️ wrangler 4.53.0 (update available 4.54.0)
-─────────────────────────────────────────────
-Uploading... (30/30)
-✨ Success! Uploaded 0 files (30 already uploaded) (0.31 sec)
-
-✨ Uploading _headers
-✨ Uploading _redirects
-🌎 Deploying...
-✨ Deployment complete! Take a peek over at https://26a52257.llms-3yk.pages.dev
-
-## 既知の制約
-- H.265/HEVCはブラウザ再生で黒画面になりやすい → H.264推奨。
-- SoVITSは参照音声をWAV(PCM)で渡すのが安全。MP3/M4Aのみだとデコード失敗例あり。
-- Pagesの25MB上限は回避不可。外部ストレージ利用で対応。
+## 既知の注意点
+- 12288 ctx / max_tokens 3500 はVRAM16GBギリギリ。長文は分割生成が安全。
+- モデルはリスト癖があるため、番号禁止を明記しつつフロントで行頭数字を自動剥がし。完全に抑止できない場合はさらにトークン上限を上げるか分割生成で対応。
+- llama-worker は起動時に nvidia-smi / libcuda をチェック（REQUIRE_GPU=1デフォルト）。ローカルCPUで動かす場合は REQUIRE_GPU=0 でスキップ可能だが性能低下。N_BATCH/MAIN_GPU も env で上書き可。
