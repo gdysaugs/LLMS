@@ -1,60 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import type { Session } from '@supabase/supabase-js'
-import { supabase, isAuthConfigured } from '../lib/supabaseClient'
 import './generate.css'
-
-type BillingStatus = {
-  tickets: number
-  subscription_status?: string | null
-}
 
 type TaskRecord = {
   status?: string
   state?: string
   stage?: string
+  output?: any
   result?: any
   error?: any
 }
 
 const formatLogTime = () => new Date().toLocaleTimeString(undefined, { hour12: false })
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// 台本の危険な記号や行頭番号を除去
 const sanitizeScript = (text: string) => {
-  const cleanedLines = text
+  const cleaned = text
     .split(/\r?\n/)
     .map((line) => line.replace(/^\s*[\d０-９]+[).、．]?\s*/, ''))
     .map((line) => line.replace(/[()（）［］\[\]{}【】<>＜＞『』「」]/g, ''))
     .map((line) => line.replace(/[!?！？…‥#:：；;＊*]/g, ''))
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-  return cleanedLines.join('\n').trim()
+  return cleaned.join('\n').trim()
 }
 
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit = {},
-  retries = 3,
-  backoffMs = 1200,
-): Promise<Response> {
-  let lastError: unknown = null
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url, options)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res
-    } catch (error) {
-      lastError = error
-      if (i < retries - 1) await delay(backoffMs * (i + 1))
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? 'fetch failed'))
-}
+const defaultModelPath = '/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf'
 
 export function Generate() {
-  const location = useLocation()
-
   const API_GATEWAY_BASE = useMemo(
     () => import.meta.env.VITE_API_GATEWAY_BASE_URL?.replace(/\/$/, '') ?? null,
     [],
@@ -65,30 +37,48 @@ export function Generate() {
   }, [API_GATEWAY_BASE])
   const API_KEY = import.meta.env.VITE_API_KEY
 
-  const serviceHeaders = useMemo<Record<string, string>>(() => {
-    const headers: Record<string, string> = {}
-    if (API_KEY) headers.Authorization = API_KEY.startsWith('Bearer ') ? API_KEY : `Bearer ${API_KEY}`
-    return headers
-  }, [API_KEY])
-
-  const [session, setSession] = useState<Session | null>(null)
-  const [billing, setBilling] = useState<BillingStatus | null>(null)
-  const [billingStatus, setBillingStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [character, setCharacter] = useState({
+    name: '陽菜',
+    role: '優しく寄り添う幼なじみ',
+    traits: 'ポジティブ・茶目っ気がある・ユーザーを否定しない',
+    style: '語尾は柔らかく、吐息や囁きは括弧内で。絵文字なし。',
+    boundaries: '暴言は避ける。センシティブな話題は受け流し、安心させる。',
+    listener: 'あなた',
+    scenario: '眠りにつく前にリラックスさせるASMR',
+  })
+  const [paragraphs, setParagraphs] = useState(6)
+  const [scriptHint, setScriptHint] = useState('甘やかし系の囁きで、寝かしつける台本を作って。')
+  const [scriptText, setScriptText] = useState('')
+  const [llamaStatus, setLlamaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [llamaTemp, setLlamaTemp] = useState(0.85)
 
   const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [scriptText, setScriptText] = useState('')
-  const [sovitsSpeed, setSovitsSpeed] = useState<number>(1.3)
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [uploadMessage, setUploadMessage] = useState('')
+  const DEFAULT_REF_KEY = 'uploads/audio/1765967631226-sample_voice_hina.mp3'
+  const [uploadedKey, setUploadedKey] = useState<string | null>(DEFAULT_REF_KEY)
+  const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(null)
 
-  const [isRunning, setIsRunning] = useState(false)
-  const [status, setStatus] = useState<
-    'idle' | 'preparing' | 'uploading' | 'running' | 'success' | 'error'
-  >('idle')
-  const [error, setError] = useState<string>('')
-  const [logs, setLogs] = useState<string[]>([])
+  const [sovitsStatus, setSovitsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [sovitsMessage, setSovitsMessage] = useState('')
+  const [sovitsSpeed, setSovitsSpeed] = useState<number>(1.2)
+  const [taskId, setTaskId] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [showPresets, setShowPresets] = useState(false)
+
+  const [logs, setLogs] = useState<string[]>([])
+
+  const sampleCharacter = {
+    name: '陽菜',
+    traits: ['恥ずかしがり', 'クラスメイト', '本当はエロい', 'シャイだけど興味津々'],
+    script: `（教室の放課後、少し赤面しながら）
+ねえ……ちょっとだけ、私の声、聴いてくれる？
+いつもは言えないけど、実は……こういうの、ずっと試してみたかったの。
+あなたにだけ、こっそり打ち明けるから……優しく聞いてほしいな。
+息を合わせて、ふたりだけの秘密みたいに、ゆっくり話すね。`,
+    audioUrl: '/media/sample-voice.mp3',
+    audioFile: 'sample_voice_hina.mp3',
+  }
 
   const audioPresets = [
     { label: '少年っぽい', url: '/presets/boy.m4a', filename: 'preset_boy.m4a' },
@@ -101,70 +91,8 @@ export function Generate() {
     { label: 'やんちゃ', url: '/presets/mesugaki.mp3', filename: 'preset_mesugaki.mp3' },
   ]
 
-  const sampleCharacter = {
-    name: 'ヒナ',
-    traits: ['恥ずかしがり', 'クラスメイト', '本当はエロい', 'シャイだけど興味津々'],
-    script: `（教室の放課後、少し赤面しながら）
-ねえ……ちょっとだけ、私の声、聴いてくれる？
-いつもは言えないけど、実は……こういうの、ずっと試してみたかったの。
-あなたにだけ、こっそり打ち明けるから……優しく聞いてほしいな。
-息を合わせて、ふたりだけの秘密みたいに、ゆっくり話すね。`,
-    audioUrl: '/media/sample-voice.mp3',
-    audioFile: 'sample_voice_hina.mp3',
-  }
-
   const appendLog = (message: string) =>
-    setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`])
-
-  const proxyUrl = (url: string) => {
-    if (!url) return url
-    if (!API_GATEWAY_BASE) return url
-    return `${API_GATEWAY_BASE}/r2-proxy?url=${encodeURIComponent(url)}`
-  }
-
-  useEffect(() => {
-    if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
-    const { data } = supabase.auth.onAuthStateChange((_event, newSession) => setSession(newSession))
-    return () => {
-      data.subscription.unsubscribe()
-    }
-  }, [])
-
-  const fetchBilling = async (activeSession: Session | null) => {
-    if (!activeSession?.access_token) {
-      setBilling(null)
-      setBillingStatus('idle')
-      return
-    }
-    setBillingStatus('loading')
-    try {
-      const res = await fetchWithRetry(API_BASE + '/billing/status', {
-        headers: { Authorization: 'Bearer ' + activeSession.access_token },
-      })
-      const data = await res.json()
-      setBilling({
-        tickets: Number(data?.tickets ?? 0),
-        subscription_status: data?.subscription_status,
-      })
-      setBillingStatus('idle')
-    } catch (err) {
-      setBillingStatus('error')
-      setBilling(null)
-    }
-  }
-
-  useEffect(() => {
-    void fetchBilling(session)
-  }, [API_BASE, session])
-
-  useEffect(() => {
-    const imported = (location.state as any)?.importedAudio as File | undefined
-    if (imported) {
-      setAudioFile(imported)
-      appendLog(`音声ファイルを読み込みました (${imported.name})`)
-    }
-  }, [location.state])
+    setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
 
   useEffect(() => {
     return () => {
@@ -172,14 +100,135 @@ export function Generate() {
     }
   }, [resultObjectUrl])
 
-  const presignUpload = async (file: File, prefix: string) => {
-    const safeName = file.name.replace(/\s+/g, '-')
-    const key = `${prefix}/${Date.now()}-${safeName}`
+  const ensureApiKey = () => {
+    if (!API_KEY) throw new Error('VITE_API_KEY が未設定です (X-Api-Key/Bearer 用)')
+    return API_KEY.startsWith('Bearer ') ? API_KEY : `Bearer ${API_KEY}`
+  }
+
+  const buildPrompt = () => {
+    const c = character
+    return `You are ${c.name}, ${c.role}.
+Persona: ${c.traits}
+Speaking style: ${c.style}
+Safety: ${c.boundaries}
+Listener name: ${c.listener}
+Scenario: ${c.scenario}
+Task: Write a Japanese ASMR voice script spoken by ${c.name} toward ${c.listener}.
+Rules:
+- ${paragraphs} 行のセリフのみを改行で並べる。必ず ${paragraphs} 行出し切るまで終わらない。空行は禁止。
+- 各行は1文だけ。行頭に数字・記号・行番号を付けない。数字を含む行は書かない。
+- 心の声・効果音・括弧やト書き・メタな締め文は一切禁止。END や 「終わり」も禁止。
+- 他の登場人物やリスナーのセリフは書かない。モノローグのみ。
+- 句読点以外の記号・絵文字（♡♪★など）や括弧類（()[]{}<>『』〝〟）は使わない。
+- 翻訳やローマ字は書かない。行数に到達したらそのまま終了する.
+Do not break character. Do not include translation or romaji.`
+  }
+
+  const fetchWithRetry = async (url: string, options: RequestInit, retries = 3, backoff = 1200) => {
+    let last: unknown = null
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, options)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res
+      } catch (err) {
+        last = err
+        if (i < retries - 1) await wait(backoff * (i + 1))
+      }
+    }
+    throw last instanceof Error ? last : new Error(String(last ?? 'fetch failed'))
+  }
+
+  const runLlama = async () => {
+    setLlamaStatus('loading')
+    setResultUrl(null)
+    setTaskId(null)
+    appendLog('LLM: 生成を開始します')
+
+    const prompt = buildPrompt()
+    const maxTokens = Math.min(3500, Math.max(800, paragraphs * 320))
+    const llamaUrl = API_GATEWAY_BASE
+      ? `${API_GATEWAY_BASE}/run-llama`
+      : `${API_BASE}/run-llama`
+
+    const body = {
+      input: {
+        prompt,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: `目標: ${scriptHint}\n長さ: ${paragraphs}段落で短く。` },
+        ],
+        max_tokens: maxTokens,
+        temperature: llamaTemp,
+        model: defaultModelPath,
+        model_path: defaultModelPath,
+      },
+    }
+
+    try {
+      const res = await fetchWithRetry(llamaUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: ensureApiKey() },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      const text =
+        (json.output?.result as string) ||
+        (json.result as string) ||
+        (json.choices?.[0]?.message?.content as string) ||
+        ''
+
+      if (text) {
+        const cleaned = sanitizeScript(text)
+        setScriptText(cleaned || text)
+        setLlamaStatus('success')
+        appendLog('LLM: 生成完了')
+        return
+      }
+
+      const jobId = json.id || json.jobId || json.job_id
+      if (jobId) {
+        appendLog(`LLM: ジョブ待機中 id=${jobId}`)
+        const statusUrl = llamaUrl.replace(/\/run-llama$/, `/run-llama/status/${jobId}`)
+        for (let i = 0; i < 120; i++) {
+          const st = await fetch(statusUrl, { headers: { Authorization: ensureApiKey() } })
+          const sj = await st.json()
+          const content =
+            (sj.output?.result as string) ||
+            (sj.result as string) ||
+            (sj.choices?.[0]?.message?.content as string) ||
+            ''
+          if (content) {
+            const cleaned = sanitizeScript(content)
+            setScriptText(cleaned || content)
+            setLlamaStatus('success')
+            appendLog('LLM: 完了 (polling)')
+            return
+          }
+          const state = String(sj.state || sj.status || 'running').toLowerCase()
+          appendLog(`LLM: 状態=${state}`)
+          if (state.includes('fail')) throw new Error('LLM ジョブが失敗しました')
+          await wait(2000)
+        }
+        throw new Error('LLM 完了待ちがタイムアウトしました')
+      }
+
+      throw new Error('LLM 応答が空でした')
+    } catch (err) {
+      setLlamaStatus('error')
+      const msg = err instanceof Error ? err.message : '生成に失敗しました'
+      appendLog(`LLM: エラー ${msg}`)
+      setScriptText('')
+    }
+  }
+
+  const presignUpload = async (file: File) => {
+    const key = `uploads/audio/${Date.now()}-${file.name.replace(/\s+/g, '-')}`
     const res = await fetchWithRetry(`${API_BASE}/storage/presign`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...serviceHeaders,
+        Authorization: ensureApiKey(),
       },
       body: JSON.stringify({
         intent: 'upload',
@@ -190,420 +239,458 @@ export function Generate() {
     })
     const data = await res.json()
     if (!data?.url || !data?.key) throw new Error('アップロードURLの取得に失敗しました')
-    return { uploadUrl: data.url as string, key: data.key as string }
+    return data as { url: string; key: string; public_url?: string }
   }
 
-  const uploadToPresigned = async (file: File, uploadUrl: string) => {
+
+
+  const ensureUploaded = async () => {
+    if (uploadedKey) return { key: uploadedKey, public_url: uploadedPublicUrl }
+    if (!audioFile) throw new Error('参照音声ファイルを選択してください')
+    setUploadStatus('loading')
+    setUploadMessage('参照音声をアップロード中...')
+    appendLog('R2: presign発行 (自動)')
+    const presign = await presignUpload(audioFile)
+    appendLog(`R2: PUT ${presign.key}`)
+    await uploadToPresigned(audioFile, presign.url)
+    setUploadedKey(presign.key)
+    setUploadedPublicUrl(presign.public_url ?? null)
+    setUploadStatus('success')
+    setUploadMessage('アップロード完了')
+    appendLog('R2: アップロード完了 (自動)')
+    return { key: presign.key, public_url: presign.public_url }
+  }
+  const uploadToPresigned = async (file: File, url: string) => {
     const target =
-      API_GATEWAY_BASE && uploadUrl.startsWith('http')
-        ? `${API_GATEWAY_BASE}/r2-proxy?url=${encodeURIComponent(uploadUrl)}`
-        : uploadUrl
-    return fetchWithRetry(
-      target,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      },
-      3,
-      1500,
-    )
-  }
-
-  const consumeTicket = async (email: string): Promise<string> => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (session?.access_token) headers.Authorization = 'Bearer ' + session.access_token
-
-    const res = await fetchWithRetry(`${API_BASE}/tickets/consume`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ email, count: 1, reason: 'generate' }),
+      API_GATEWAY_BASE && url.startsWith('http')
+        ? `${API_GATEWAY_BASE}/r2-proxy?url=${encodeURIComponent(url)}`
+        : url
+    await fetchWithRetry(target, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
     })
-    const data = await res.json()
-    if (!data?.usage_id) throw new Error('チケット消費に失敗しました')
-    appendLog('チケットを1枚消費しました')
-    return data.usage_id as string
   }
 
-  const refundTicket = async (usageId: string, reason = 'pipeline_failed') => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (session?.access_token) headers.Authorization = 'Bearer ' + session.access_token
+  const handleUpload = async () => {
+    if (!audioFile) {
+      setUploadStatus('error')
+      setUploadMessage('参照音声ファイルを選択してください')
+      return
+    }
     try {
-      await fetchWithRetry(`${API_BASE}/tickets/refund`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ usage_id: usageId, reason }),
-      })
-      appendLog('チケットをリファンドしました')
-    } catch {
-      appendLog('チケットのリファンドに失敗しました')
+      setUploadStatus('loading')
+      setUploadMessage('参照音声をアップロード中...')
+      appendLog('R2: presign発行')
+      const presign = await presignUpload(audioFile)
+      appendLog(`R2: PUT ${presign.key}`)
+      await uploadToPresigned(audioFile, presign.url)
+      setUploadedKey(presign.key)
+      setUploadedPublicUrl(presign.public_url ?? null)
+      setUploadStatus('success')
+      setUploadMessage('アップロード完了')
+      appendLog('R2: アップロード完了')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'アップロードに失敗しました'
+      setUploadStatus('error')
+      setUploadMessage(msg)
+      appendLog(`R2: エラー ${msg}`)
     }
   }
 
-  const startPipeline = async (payload: Record<string, any>) => {
-    const res = await fetchWithRetry(`${API_BASE}/run`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...serviceHeaders,
-      },
-      body: JSON.stringify(payload),
-    })
-    const data = await res.json()
-    if (data?.task_id) return data.task_id as string
-    if (data?.result?.output_url) return data.result.output_url as string
-    throw new Error('生成ジョブの開始に失敗しました')
-  }
-
-  const pollTask = async (id: string): Promise<TaskRecord> => {
-    let attempt = 0
-    const maxAttempts = 240
-    while (attempt < maxAttempts) {
-      const res = await fetchWithRetry(`${API_BASE}/status/${id}`, { headers: serviceHeaders }, 2, 1200)
-      const data = (await res.json()) as TaskRecord
-      const state = data.state || data.status
-      if (state === 'completed') return data
-      if (state === 'failed') throw new Error(data?.error?.detail || 'ジョブが失敗しました')
-      attempt += 1
-      await delay(4000 + attempt * 100)
-    }
-    throw new Error('ジョブがタイムアウトしました')
-  }
-
-  const extractOutputUrl = (record: TaskRecord): string | null => {
-    const result = record.result || {}
+  const extractOutputUrl = (record: TaskRecord) => {
+    const r = record.result || record.output || record
     return (
-      result?.sovits?.output_url ||
-      result?.presigned_url ||
-      result.output_url ||
-      result.public_url ||
-      result.url ||
-      result.mp3_url ||
-      result.wav_url ||
+      r?.sovits?.output_url ||
+      r?.output_url ||
+      r?.public_url ||
+      r?.presigned_url ||
+      r?.url ||
+      r?.mp3_url ||
+      r?.wav_url ||
       null
     )
   }
 
-  const logStagesIfAvailable = (record: TaskRecord) => {
-    const result = record.result || {}
-    if (result?.sovits?.output_url) appendLog('音声合成ステージ完了')
+  const pollSovits = async (id: string) => {
+    const statusUrl = API_GATEWAY_BASE
+      ? `${API_GATEWAY_BASE}/run-sovits/status/${id}`
+      : `${API_BASE}/run-sovits/status/${id}`
+    for (let i = 0; i < 240; i++) {
+      const res = await fetchWithRetry(statusUrl, { headers: { Authorization: ensureApiKey() } }, 2, 1200)
+      const json = (await res.json()) as TaskRecord
+      const state = String(json.state || json.status || 'running').toLowerCase()
+      appendLog(`SoVITS: 状態 ${state}`)
+      const url = extractOutputUrl(json)
+      if (url) return url
+      if (state.includes('fail')) throw new Error(json.error?.detail || 'ジョブが失敗しました')
+      await wait(4000 + i * 100)
+    }
+    throw new Error('ジョブがタイムアウトしました')
   }
 
-  const loadResultMedia = async (url: string) => {
-    const proxied = proxyUrl(url)
-    setResultUrl(url)
+  const handleSovits = async () => {
+    const cleanedScript = sanitizeScript(scriptText || '')
+    if (!cleanedScript) {
+      setSovitsStatus('error')
+      setSovitsMessage('台本テキストを用意してください（空欄不可）')
+      return
+    }
+
     try {
-      const res = await fetchWithRetry(proxied ?? url, {}, 2, 1200)
-      const blob = await res.blob()
-      const obj = URL.createObjectURL(blob)
-      setResultObjectUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return obj
-      })
-      appendLog('結果ファイルを読み込みました')
-    } catch {
+      setSovitsStatus('loading')
+      setSovitsMessage('SoVITSに送信中...')
+      setResultUrl(null)
       setResultObjectUrl(null)
-      appendLog('結果の取得に失敗しました（直接リンクを開いてください）')
-    }
-  }
+      setTaskId(null)
+      appendLog('SoVITS: リクエスト送信')
 
-  const handlePreset = async (presetUrl: string, filename: string) => {
-    try {
-      const res = await fetch(presetUrl)
-      const blob = await res.blob()
-      const file = new File([blob], filename, { type: blob.type || 'audio/mp3' })
-      setAudioFile(file)
-      appendLog(`音声プリセットを読み込みました (${filename})`)
-    } catch {
-      appendLog('音声プリセットの読み込みに失敗しました')
-    }
-  }
+      const uploaded = await ensureUploaded()
 
-  const previewPreset = (presetUrl: string) => {
-    const audio = new Audio(presetUrl)
-    void audio.play()
-  }
-
-  const handleSampleCharacter = async () => {
-    setShowPresets(true)
-    setScriptText(sampleCharacter.script)
-    appendLog(`サンプルキャラ「${sampleCharacter.name}」の台本をセットしました`)
-    try {
-      await handlePreset(sampleCharacter.audioUrl, sampleCharacter.audioFile)
-      appendLog('ヒナの音声プリセットを適用しました')
-    } catch {
-      // handled inside preset loader
-    }
-  }
-
-  const handleGenerate = async () => {
-    setError('')
-    setStatus('preparing')
-    setResultUrl(null)
-    setResultObjectUrl(null)
-    setTaskId(null)
-
-    const sanitizedScript = sanitizeScript(scriptText || '')
-
-    if (!isAuthConfigured || !supabase) {
-      setError('Supabase が未設定です（VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY を確認）')
-      setStatus('error')
-      return
-    }
-    if (!session?.user) {
-      setError('ログインしてください（ページ上部のログイン/登録ボタンから）')
-      setStatus('error')
-      return
-    }
-    if (!audioFile) {
-      setError('音声ファイルを選択してください（プリセットでもOK）')
-      setStatus('error')
-      return
-    }
-    if (!billing || billing.tickets <= 0) {
-      setError('チケット残高がありません。Stripeから購入・サブスクしてください。')
-      setStatus('error')
-      return
-    }
-
-    setIsRunning(true)
-    appendLog('生成を開始します')
-
-    let usageId: string | null = null
-
-    try {
-      setStatus('uploading')
-      appendLog('音声をアップロード中...')
-      const audioPresign = await presignUpload(audioFile, 'uploads/audio')
-      await uploadToPresigned(audioFile, audioPresign.uploadUrl)
-
-      setStatus('running')
-      usageId = await consumeTicket(session.user.email ?? '')
-
-      const payload: Record<string, any> = {
-        audio_key: audioPresign.key,
-        script_text: sanitizedScript || undefined,
-        source_keys: [],
-        retain_intermediate: true,
-        sovits: { speed: sovitsSpeed, temperature: 1.0 },
+      const payload = {
+        input: {
+          reference_audio_key: uploaded.key,
+          target_text: cleanedScript,
+          reference_text: undefined,
+          ref_text_free: true,
+          output_key: `outputs/sovits/${Date.now()}.wav`,
+          options: {
+            target_language: 'ja',
+            ref_language: 'ja',
+            speed: sovitsSpeed,
+            top_p: 1,
+            temperature: 1,
+            pause_second: 0.35,
+            sample_steps: 8,
+            cut: 'punctuation',
+            with_prosody: false,
+            output_prefix: 'outputs/sovits',
+          },
+        },
       }
-      appendLog('ジョブを開始しました')
-      const maybeTaskId = await startPipeline(payload)
 
-      if (maybeTaskId.startsWith('http')) {
-        setStatus('success')
-        appendLog('生成が完了しました')
-        await loadResultMedia(maybeTaskId)
-        setIsRunning(false)
+      const sovitsUrl = API_GATEWAY_BASE
+        ? `${API_GATEWAY_BASE}/run-sovits`
+        : `${API_BASE}/run-sovits`
+
+      const res = await fetchWithRetry(sovitsUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: ensureApiKey(),
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const json = await res.json()
+      const url = extractOutputUrl(json)
+      if (url) {
+        setResultUrl(url)
+        setSovitsStatus('success')
+        setSovitsMessage('音声生成が完了しました')
+        appendLog('SoVITS: 完了(同期レスポンス)')
         return
       }
 
-      setTaskId(maybeTaskId)
-      appendLog(`Task ID: ${maybeTaskId} を待機中...`)
-
-      const record = await pollTask(maybeTaskId)
-      logStagesIfAvailable(record)
-      const outputUrl = extractOutputUrl(record)
-      if (!outputUrl) throw new Error('出力URLが取得できませんでした')
-
-      setStatus('success')
-      appendLog('生成が完了しました')
-      await loadResultMedia(outputUrl)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '生成に失敗しました'
-      setError(message)
-      setStatus('error')
-      appendLog(`エラー: ${message}`)
-      if (usageId) await refundTicket(usageId)
-    } finally {
-      setIsRunning(false)
-      if (session?.access_token) {
-        void fetchBilling(session)
+      const id = json.id || json.jobId || json.job_id
+      if (id) {
+        setTaskId(id)
+        appendLog(`SoVITS: ジョブID ${id}`)
+        const finalUrl = await pollSovits(id)
+        setResultUrl(finalUrl)
+        setSovitsStatus('success')
+        setSovitsMessage('音声生成が完了しました')
+        appendLog('SoVITS: 完了(ステータス)')
+        return
       }
+
+      throw new Error('出力URLが取得できませんでした')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '合成に失敗しました'
+      setSovitsStatus('error')
+      setSovitsMessage(msg)
+      appendLog(`SoVITS: エラー ${msg}`)
     }
   }
 
-  const isAuthenticated = Boolean(session?.user)
-  const canGenerate = isAuthenticated && !isRunning
+const handleSample = async () => {
+    setScriptText(sampleCharacter.script)
+    appendLog('サンプルキャラの台本をセットしました')
+    try {
+      const res = await fetch(sampleCharacter.audioUrl)
+      const blob = await res.blob()
+      const file = new File([blob], sampleCharacter.audioFile, { type: blob.type || 'audio/mp3' })
+      setAudioFile(file)
+      appendLog('サンプル音声を読み込みました')
+    } catch {
+      appendLog('サンプル音声の読み込みに失敗しました（手動でアップしてください）')
+    }
+  }
 
-  const ticketDisplay = (() => {
-    if (!isAuthenticated) return '未ログイン'
-    if (billingStatus === 'loading') return '残高確認中...'
-    if (billingStatus === 'error') return '取得失敗'
-    return `${billing?.tickets ?? 0} 枚`
-  })()
+  const promptPreview = buildPrompt()
 
   return (
     <div className="page">
-      <div className="status-bar">
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span>ログイン: {isAuthenticated ? session?.user?.email ?? 'アカウント' : '未ログイン'}</span>
-          <span>チケット: {ticketDisplay}</span>
-          <span>サブスク: {billing?.subscription_status ?? 'inactive'}</span>
-          <a className="chip" href="/#auth">
-            ログイン / 登録
-          </a>
-          <a className="chip" href="/#billing">
-            サブスク・チケット購入
-          </a>
-        </div>
-      </div>
-
-      <div className="hero">
-        <p className="eyebrow">Audio Only Pipeline</p>
-        <h1>音声だけで生成する /generate</h1>
-        <p className="lede">動画入力は不要。音声と台本で SoVITS + LLaMA パイプラインを回します。</p>
-        <div className="chips">
-          <span className="chip">音声アップロード</span>
-          <span className="chip">プリセット選択</span>
-          <span className="chip">台本テキスト</span>
-          <span className="chip">チケット消費: 1枚/回</span>
-        </div>
-      </div>
-
-      <div className="grid two">
-        <div className="card">
-          <div className="card-header">
-            <h2>サンプルキャラで即試す</h2>
-            <span className="chip">ヒナ / この声で作る</span>
-          </div>
-          <div className="chips" style={{ marginBottom: 10 }}>
-            {sampleCharacter.traits.map((trait) => (
-              <span key={trait} className="chip">
-                {trait}
-              </span>
-            ))}
-          </div>
-          <p className="muted" style={{ whiteSpace: 'pre-line' }}>
-            {sampleCharacter.script}
+      <header className="hero">
+        <div>
+          <p className="eyebrow">ASMR Voice Studio</p>
+          <h1>キャラ設定 → 台本生成 → 声真似合成を1画面で</h1>
+          <p className="lede">
+            Llama で性格とシーンに沿った台本を作り、GPT-SoVITS(ref-free対応)で参照音声の声質をコピーしたASMR音声を生成します。
           </p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-            <button type="button" className="primary" onClick={handleSampleCharacter}>
-              ヒナの声で作る
-            </button>
-            <button type="button" onClick={() => previewPreset(sampleCharacter.audioUrl)}>
-              サンプル音声を再生
-            </button>
-            <a className="chip" href="/#billing">
-              サブスク / チケット購入へ
-            </a>
-          </div>
         </div>
+        <div className="chips">
+          <span className="chip">LLM: llama-worker(Q6)</span>
+          <span className="chip">Voice: SoVITS ref-free10</span>
+          <span className="chip">R2 presign 対応</span>
+        </div>
+      </header>
 
-        <div className="card">
+      <div className="grid">
+        <section className="card">
           <div className="card-header">
-            <h2>音声をアップロード / プリセット</h2>
-            <span className="chip">音声のみ</span>
+            <h2>1. キャラクター設定</h2>
+            <span className="muted">システムプロンプトに反映</span>
+          </div>
+          <label className="field">
+            <span>キャラ名</span>
+            <input
+              value={character.name}
+              onChange={(e) => setCharacter({ ...character, name: e.target.value })}
+              placeholder="例: 陽菜"
+            />
+          </label>
+          <label className="field">
+            <span>役割 / ポジション</span>
+            <input
+              value={character.role}
+              onChange={(e) => setCharacter({ ...character, role: e.target.value })}
+              placeholder="例: 優しく寄り添う幼なじみ"
+            />
+          </label>
+          <label className="field">
+            <span>性格・特徴</span>
+            <textarea
+              value={character.traits}
+              onChange={(e) => setCharacter({ ...character, traits: e.target.value })}
+              rows={2}
+            />
+          </label>
+          <label className="field">
+            <span>話し方スタイル</span>
+            <textarea
+              value={character.style}
+              onChange={(e) => setCharacter({ ...character, style: e.target.value })}
+              rows={2}
+            />
+          </label>
+          <label className="field">
+            <span>境界・守ってほしいこと</span>
+            <textarea
+              value={character.boundaries}
+              onChange={(e) => setCharacter({ ...character, boundaries: e.target.value })}
+              rows={2}
+            />
+          </label>
+          <div className="field inline">
+            <div className="inline-field">
+              <span>リスナー名</span>
+              <input
+                value={character.listener}
+                onChange={(e) => setCharacter({ ...character, listener: e.target.value })}
+                placeholder="例: あなた"
+              />
+            </div>
+            <div className="inline-field">
+              <span>想定シーン</span>
+              <input
+                value={character.scenario}
+                onChange={(e) => setCharacter({ ...character, scenario: e.target.value })}
+                placeholder="例: 就寝前の囁き"
+              />
+            </div>
           </div>
           <div className="field">
-            <label htmlFor="audio">音声 (無音でも可・SoVITSで合成)</label>
+            <span>台本長さ (段落数)</span>
             <input
-              id="audio"
+              type="range"
+              min={3}
+              max={200}
+              value={paragraphs}
+              onChange={(e) => setParagraphs(Number(e.target.value))}
+            />
+            <div className="muted">{paragraphs} 段落くらい（最大200段落）</div>
+          </div>
+          <label className="field">
+            <span>台本の目的・追加指示</span>
+            <textarea
+              value={scriptHint}
+              onChange={(e) => setScriptHint(e.target.value)}
+              rows={2}
+              placeholder="例: 甘やかし系で寝かしつける"
+            />
+          </label>
+          <div className="field">
+            <span>生成されるプロンプト</span>
+            <textarea value={promptPreview} readOnly rows={6} />
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header">
+            <h2>2. 台本生成 (Llama)</h2>
+            <span className={`status ${llamaStatus}`}>{llamaStatus}</span>
+          </div>
+          <div className="field">
+            <span>LLM温度</span>
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={llamaTemp}
+              onChange={(e) => setLlamaTemp(Number(e.target.value))}
+            />
+            <div className="muted">{llamaTemp.toFixed(2)}</div>
+          </div>
+          <div className="muted">生成トークン上限は段落数に応じて最大3500まで自動設定されます。</div>
+          <button type="button" className="primary" onClick={runLlama} disabled={llamaStatus === 'loading'}>
+            {llamaStatus === 'loading' ? '生成中...' : '台本を作成する'}
+          </button>
+          <div className="field">
+            <span>台本</span>
+            <textarea
+              value={scriptText}
+              onChange={(e) => setScriptText(e.target.value)}
+              rows={10}
+              placeholder="生成された台本がここに表示されます"
+            />
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-header">
+            <h2>3. 参照音声アップロード (R2)</h2>
+            <span className={`status ${uploadStatus}`}>{uploadStatus}</span>
+          </div>
+          <label className="field">
+            <span>音声ファイル (WAV/MP3/M4A等)</span>
+            <input
               type="file"
-              accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg"
+              accept="audio/*"
               onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
             />
             <p className="muted">{audioFile ? audioFile.name : 'ファイルが選択されていません'}</p>
-          </div>
+          </label>
           <div className="field">
-            <button type="button" onClick={() => setShowPresets((v) => !v)} className="chip">
-              {showPresets ? '▲ プリセットを閉じる' : '▼ プリセットから選ぶ'}
+            <button type="button" onClick={handleSample} className="chip">
+              サンプル音声と台本を適用
             </button>
-            {showPresets && (
-              <div className="grid two" style={{ marginTop: 8 }}>
-                {audioPresets.map((preset) => (
-                  <div key={preset.url} className="card" style={{ padding: 12 }}>
-                    <div className="card-header">
-                      <h3 style={{ margin: 0 }}>{preset.label}</h3>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button type="button" className="chip" onClick={() => handlePreset(preset.url, preset.filename)}>
-                        この声を使う
-                      </button>
-                      <button type="button" className="chip" onClick={() => previewPreset(preset.url)}>
-                        試聴
-                      </button>
-                    </div>
+            <div className="muted" style={{ whiteSpace: 'pre-line' }}>
+              {sampleCharacter.script}
+            </div>
+          </div>
+          <div className="field">
+            <button type="button" className="chip" disabled>
+              ▼ プリセットから選ぶ（手動適用してください）
+            </button>
+            <div className="grid two" style={{ marginTop: 8 }}>
+              {audioPresets.map((preset) => (
+                <div key={preset.url} className="card" style={{ padding: 12 }}>
+                  <div className="card-header">
+                    <h3 style={{ margin: 0 }}>{preset.label}</h3>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="muted">{preset.filename}</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <a className="chip" href={preset.url} target="_blank" rel="noreferrer">
+                      ダウンロード
+                    </a>
+                    <audio src={preset.url} controls style={{ width: '100%' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button type="button" onClick={handleUpload} disabled={uploadStatus === 'loading'}>
+            {uploadStatus === 'loading' ? 'アップロード中...' : '参照音声をアップロード'}
+          </button>
+          {uploadMessage && <div className={uploadStatus === 'error' ? 'error' : 'muted'}>{uploadMessage}</div>}
+          {uploadedKey && (
+            <div className="muted">
+              key: <code>{uploadedKey}</code>
+              {uploadedPublicUrl && (
+                <>
+                  <br />
+                  public:{' '}
+                  <a href={uploadedPublicUrl} target="_blank" rel="noreferrer">
+                    {uploadedPublicUrl}
+                  </a>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="card-header">
+            <h2>4. SoVITS 合成</h2>
+            <span className={`status ${sovitsStatus}`}>{sovitsStatus}</span>
           </div>
           <div className="field">
-            <label htmlFor="script">台本 / セリフ（数字・効果音・括弧は禁止）</label>
-            <textarea
-              id="script"
-              placeholder="セリフをここに書くか、空欄でもOK（SoVITSのみ）"
-              value={scriptText}
-              onChange={(e) => setScriptText(e.target.value)}
-              rows={4}
-            />
-            <p className="muted">
-              行頭の番号・記号は自動で除去します。200行まで推奨、最大トークン3500相当。
-            </p>
+            <span>オプション (固定値 / UI簡略)</span>
+            <div className="muted">
+              言語: ja / 速度: {sovitsSpeed.toFixed(1)} / temperature:1.0 / top_p:1.0 / sample_steps:8 / prosody: off /
+              cut: punctuation
+            </div>
           </div>
           <div className="field">
-            <label htmlFor="speed">話速 (1.3 - 2.0 推奨: 1.3)</label>
+            <label htmlFor="speed">話速</label>
             <input
               id="speed"
               type="range"
-              min="1.3"
-              max="2"
+              min="1.0"
+              max="2.0"
               step="0.1"
               value={sovitsSpeed}
               onChange={(e) => setSovitsSpeed(parseFloat(e.target.value))}
             />
-            <div className="muted">現在: {sovitsSpeed.toFixed(1)}x</div>
           </div>
-          <div className="field" style={{ gap: 10 }}>
-            <button type="button" className="primary" onClick={handleGenerate} disabled={!canGenerate}>
-              {isRunning ? '生成中...' : 'この内容で生成する'}
-            </button>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span className={`status ${status === 'success' ? 'success' : status === 'error' ? 'error' : 'loading'}`}>
-                {status}
-              </span>
-              {taskId && <span className="chip">Task ID: {taskId}</span>}
+          <button type="button" className="primary" onClick={handleSovits} disabled={sovitsStatus === 'loading'}>
+            {sovitsStatus === 'loading' ? '合成中...' : 'ASMR音声を生成する'}
+          </button>
+          {sovitsMessage && <div className={sovitsStatus === 'error' ? 'error' : 'muted'}>{sovitsMessage}</div>}
+          {taskId && (
+            <div className="muted">
+              ジョブID: <code>{taskId}</code>
             </div>
-            {error && <p className="error">{error}</p>}
-            {!isAuthenticated && <p className="error">ログインが必要です。上部のログイン/登録から。</p>}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid">
-        <div className="card">
-          <div className="card-header">
-            <h2>ステータス / ログ</h2>
-          </div>
-          <div className="log-window">
-            {logs.length === 0 && <p className="muted">まだログはありません</p>}
-            {logs.map((line, idx) => (
-              <div key={idx} className="log-line">
-                {line}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {(resultUrl || resultObjectUrl) && (
-          <div className="card">
-            <div className="card-header">
-              <h2>生成結果 (音声)</h2>
-            </div>
+          )}
+          {resultUrl && (
             <div className="audio-output">
-              <audio
-                src={resultObjectUrl ?? resultUrl ?? undefined}
-                controls
-                style={{ width: '100%', maxWidth: 420, display: 'block', margin: '0 auto' }}
-              />
-              <p className="muted" style={{ marginTop: 8 }}>
-                配布URL: {resultUrl ? <a href={resultUrl}>{resultUrl}</a> : '未取得'}
-              </p>
+              <audio controls src={resultObjectUrl ?? resultUrl} />
+              <div className="muted">
+                配布URL:{' '}
+                <a href={resultUrl} target="_blank" rel="noreferrer">
+                  {resultUrl}
+                </a>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </section>
       </div>
+
+      <section className="card wide">
+        <div className="card-header">
+          <h2>ログ</h2>
+        </div>
+        <div className="log-window">
+          {logs.length === 0 && <div className="muted">まだログはありません</div>}
+          {logs.map((line, idx) => (
+            <div key={idx} className="log-line">
+              {line}
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }
