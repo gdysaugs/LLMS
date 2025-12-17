@@ -40,14 +40,14 @@ export function Generate() {
   const [character, setCharacter] = useState({
     name: '陽菜',
     role: '優しく寄り添う幼なじみ',
-    traits: 'ポジティブ・茶目っ気がある・ユーザーを否定しない',
+    traits: '恥ずかしがり屋・シャイ・ポジティブ',
     style: '語尾は柔らかく、吐息や囁きは括弧内で。絵文字なし。',
     boundaries: '暴言は避ける。センシティブな話題は受け流し、安心させる。',
     listener: 'あなた',
-    scenario: '眠りにつく前にリラックスさせるASMR',
+    scenario: '学校の放課後、教室で二人きり',
   })
   const [paragraphs, setParagraphs] = useState(6)
-  const [scriptHint, setScriptHint] = useState('甘やかし系の囁きで、寝かしつける台本を作って。')
+  const [scriptHint, setScriptHint] = useState('デートのあとの帰り道、照れながら手を繋いでくれる台本を作って。')
   const [scriptText, setScriptText] = useState('')
   const [llamaStatus, setLlamaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [llamaTemp, setLlamaTemp] = useState(0.85)
@@ -66,6 +66,35 @@ export function Generate() {
   const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
 
   const [logs, setLogs] = useState<string[]>([])
+
+  const scenePresets = [
+    { id: 'school', label: '学校', scenario: '学校の放課後、教室で二人きり' },
+    { id: 'home', label: '自宅', scenario: 'あなたの自宅でくつろぎながら二人きり' },
+  ]
+
+  const actionPresets = [
+    { id: 'date', label: 'デート', hint: 'デートのあとの帰り道、照れながら手を繋いでくれる台本を作って。' },
+    { id: 'sleep', label: '寝かしつけ', hint: '眠れないあなたに、優しく寝かしつける囁きの台本を作って。' },
+  ]
+
+  const [selectedScene, setSelectedScene] = useState(scenePresets[0].id)
+  const [selectedAction, setSelectedAction] = useState(actionPresets[0].id)
+
+  const applyScene = (id: string) => {
+    const found = scenePresets.find((s) => s.id === id)
+    if (found) {
+      setSelectedScene(id)
+      setCharacter((prev) => ({ ...prev, scenario: found.scenario }))
+    }
+  }
+
+  const applyAction = (id: string) => {
+    const found = actionPresets.find((a) => a.id === id)
+    if (found) {
+      setSelectedAction(id)
+      setScriptHint(found.hint)
+    }
+  }
 
   const appendLog = (message: string) =>
     setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
@@ -420,6 +449,28 @@ Do not break character. Do not include translation or romaji.`
           <div className="card-header">
             <h2>1. キャラクター設定</h2>
             <span className="muted">システムプロンプトに反映</span>
+          </div>
+          <div className="field inline">
+            <div className="inline-field">
+              <span>シチュエーションプリセット</span>
+              <select value={selectedScene} onChange={(e) => applyScene(e.target.value)}>
+                {scenePresets.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="inline-field">
+              <span>行動プリセット</span>
+              <select value={selectedAction} onChange={(e) => applyAction(e.target.value)}>
+                {actionPresets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <label className="field">
             <span>キャラ名</span>
