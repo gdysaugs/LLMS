@@ -26,6 +26,65 @@ const sanitizeScript = (text: string) => {
 
 const defaultModelPath = '/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf'
 
+const audioBufferToWav = (buffer: AudioBuffer) => {
+  const numOfChan = buffer.numberOfChannels
+  const length = buffer.length * numOfChan * 2 + 44
+  const outBuffer = new ArrayBuffer(length)
+  const view = new DataView(outBuffer)
+
+  const writeString = (viewParam: DataView, offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      viewParam.setUint8(offset + i, str.charCodeAt(i))
+    }
+  }
+
+  let offset = 0
+
+  writeString(view, offset, 'RIFF')
+  offset += 4
+  view.setUint32(offset, length - 8, true)
+  offset += 4
+  writeString(view, offset, 'WAVE')
+  offset += 4
+  writeString(view, offset, 'fmt ')
+  offset += 4
+  view.setUint32(offset, 16, true)
+  offset += 4
+  view.setUint16(offset, 1, true)
+  offset += 2
+  view.setUint16(offset, numOfChan, true)
+  offset += 2
+  view.setUint32(offset, buffer.sampleRate, true)
+  offset += 4
+  view.setUint32(offset, buffer.sampleRate * numOfChan * 2, true)
+  offset += 4
+  view.setUint16(offset, numOfChan * 2, true)
+  offset += 2
+  view.setUint16(offset, 16, true)
+  offset += 2
+  writeString(view, offset, 'data')
+  offset += 4
+  view.setUint32(offset, length - offset - 4, true)
+  offset += 4
+
+  const channels = []
+  for (let i = 0; i < numOfChan; i++) {
+    channels.push(buffer.getChannelData(i))
+  }
+
+  let sample = 0
+  while (sample < buffer.length) {
+    for (let channel = 0; channel < numOfChan; channel++) {
+      const sample16 = Math.max(-1, Math.min(1, channels[channel][sample])) * 0x7fff
+      view.setInt16(offset, sample16, true)
+      offset += 2
+    }
+    sample++
+  }
+
+  return outBuffer
+}
+
 export function Generate() {
   const API_GATEWAY_BASE = useMemo(
     () => import.meta.env.VITE_API_GATEWAY_BASE_URL?.replace(/\/$/, '') ?? null,
@@ -55,8 +114,7 @@ export function Generate() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [uploadMessage, setUploadMessage] = useState('')
-  const DEFAULT_REF_KEY = 'uploads/audio/1765967631226-sample_voice_hina.mp3'
-  const [uploadedKey, setUploadedKey] = useState<string | null>(DEFAULT_REF_KEY)
+  const [uploadedKey, setUploadedKey] = useState<string | null>(null)
   const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(null)
 
   const [sovitsStatus, setSovitsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
@@ -68,31 +126,57 @@ export function Generate() {
 
   const [logs, setLogs] = useState<string[]>([])
 
-  const sampleCharacter = {
-    name: '陽菜',
-    traits: ['恥ずかしがり', 'クラスメイト', '本当はエロい', 'シャイだけど興味津々'],
-    script: `（教室の放課後、少し赤面しながら）
-ねえ……ちょっとだけ、私の声、聴いてくれる？
-いつもは言えないけど、実は……こういうの、ずっと試してみたかったの。
-あなたにだけ、こっそり打ち明けるから……優しく聞いてほしいな。
-息を合わせて、ふたりだけの秘密みたいに、ゆっくり話すね。`,
-    audioUrl: '/media/sample-voice.mp3',
-    audioFile: 'sample_voice_hina.mp3',
-  }
-
-  const audioPresets = [
-    { label: '少年っぽい', url: '/presets/boy.m4a', filename: 'preset_boy.m4a' },
-    { label: '可愛いクラスメイト', url: '/presets/cute_girl.wav', filename: 'preset_cute_girl.wav' },
-    { label: 'お姉さん', url: '/presets/oneesan.m4a', filename: 'preset_oneesan.m4a' },
-    { label: '高めの女性', url: '/presets/high_female.m4a', filename: 'preset_high_female.m4a' },
-    { label: '低めの女性', url: '/presets/low_female.m4a', filename: 'preset_low_female.m4a' },
-    { label: '泣き声ニュアンス', url: '/presets/nakigoe.mp3', filename: 'preset_nakigoe.mp3' },
-    { label: '元気な子', url: '/presets/energetic_girl.mp3', filename: 'preset_energetic_girl.mp3' },
-    { label: 'やんちゃ', url: '/presets/mesugaki.mp3', filename: 'preset_mesugaki.mp3' },
-  ]
-
   const appendLog = (message: string) =>
     setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
+
+  const applyAsmrFilters = async (url: string) => {
+    try {
+      appendLog('ASMR: 音質調整を開始 (ブラウザ処理)')
+      const res = await fetch(url)
+      const array = await res.arrayBuffer()
+      const ctx = new AudioContext()
+      const decoded = await ctx.decodeAudioData(array.slice(0))
+      ctx.close()
+
+      const offline = new OfflineAudioContext(decoded.numberOfChannels, decoded.length, decoded.sampleRate)
+      const source = offline.createBufferSource()
+      source.buffer = decoded
+
+      const highpass = offline.createBiquadFilter()
+      highpass.type = 'highpass'
+      highpass.frequency.value = 90
+
+      const deEss = offline.createBiquadFilter()
+      deEss.type = 'peaking'
+      deEss.frequency.value = 6500
+      deEss.Q.value = 5
+      deEss.gain.value = -6
+
+      const sparkle = offline.createBiquadFilter()
+      sparkle.type = 'highshelf'
+      sparkle.frequency.value = 9000
+      sparkle.gain.value = 3
+
+      const compressor = offline.createDynamicsCompressor()
+      compressor.threshold.value = -22
+      compressor.ratio.value = 2
+      compressor.attack.value = 0.01
+      compressor.release.value = 0.25
+
+      source.connect(highpass).connect(deEss).connect(sparkle).connect(compressor).connect(offline.destination)
+      source.start(0)
+      const rendered = await offline.startRendering()
+
+      const wavBuffer = audioBufferToWav(rendered)
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' })
+      const objUrl = URL.createObjectURL(blob)
+      appendLog('ASMR: 音質調整完了')
+      return objUrl
+    } catch (err) {
+      appendLog(`ASMR: 音質調整スキップ (${err instanceof Error ? err.message : err})`)
+      return null
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -180,7 +264,8 @@ Do not break character. Do not include translation or romaji.`
 
       if (text) {
         const cleaned = sanitizeScript(text)
-        setScriptText(cleaned || text)
+        const finalScript = cleaned || text || prompt
+        setScriptText(finalScript)
         setLlamaStatus('success')
         appendLog('LLM: 生成完了')
         return
@@ -200,7 +285,8 @@ Do not break character. Do not include translation or romaji.`
             ''
           if (content) {
             const cleaned = sanitizeScript(content)
-            setScriptText(cleaned || content)
+            const finalScript = cleaned || content || prompt
+            setScriptText(finalScript)
             setLlamaStatus('success')
             appendLog('LLM: 完了 (polling)')
             return
@@ -385,9 +471,11 @@ Do not break character. Do not include translation or romaji.`
       const json = await res.json()
       const url = extractOutputUrl(json)
       if (url) {
+        const processed = await applyAsmrFilters(url)
+        setResultObjectUrl(processed)
         setResultUrl(url)
         setSovitsStatus('success')
-        setSovitsMessage('音声生成が完了しました')
+        setSovitsMessage(processed ? '音質調整済み (ASMR)' : '音声生成が完了しました')
         appendLog('SoVITS: 完了(同期レスポンス)')
         return
       }
@@ -397,9 +485,11 @@ Do not break character. Do not include translation or romaji.`
         setTaskId(id)
         appendLog(`SoVITS: ジョブID ${id}`)
         const finalUrl = await pollSovits(id)
+        const processed = await applyAsmrFilters(finalUrl)
+        setResultObjectUrl(processed)
         setResultUrl(finalUrl)
         setSovitsStatus('success')
-        setSovitsMessage('音声生成が完了しました')
+        setSovitsMessage(processed ? '音質調整済み (ASMR)' : '音声生成が完了しました')
         appendLog('SoVITS: 完了(ステータス)')
         return
       }
@@ -410,20 +500,6 @@ Do not break character. Do not include translation or romaji.`
       setSovitsStatus('error')
       setSovitsMessage(msg)
       appendLog(`SoVITS: エラー ${msg}`)
-    }
-  }
-
-const handleSample = async () => {
-    setScriptText(sampleCharacter.script)
-    appendLog('サンプルキャラの台本をセットしました')
-    try {
-      const res = await fetch(sampleCharacter.audioUrl)
-      const blob = await res.blob()
-      const file = new File([blob], sampleCharacter.audioFile, { type: blob.type || 'audio/mp3' })
-      setAudioFile(file)
-      appendLog('サンプル音声を読み込みました')
-    } catch {
-      appendLog('サンプル音声の読み込みに失敗しました（手動でアップしてください）')
     }
   }
 
@@ -581,36 +657,8 @@ const handleSample = async () => {
               onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
             />
             <p className="muted">{audioFile ? audioFile.name : 'ファイルが選択されていません'}</p>
+            <p className="muted">プリセットは撤去しました。毎回、参照音声をアップロードしてください。</p>
           </label>
-          <div className="field">
-            <button type="button" onClick={handleSample} className="chip">
-              サンプル音声と台本を適用
-            </button>
-            <div className="muted" style={{ whiteSpace: 'pre-line' }}>
-              {sampleCharacter.script}
-            </div>
-          </div>
-          <div className="field">
-            <button type="button" className="chip" disabled>
-              ▼ プリセットから選ぶ（手動適用してください）
-            </button>
-            <div className="grid two" style={{ marginTop: 8 }}>
-              {audioPresets.map((preset) => (
-                <div key={preset.url} className="card" style={{ padding: 12 }}>
-                  <div className="card-header">
-                    <h3 style={{ margin: 0 }}>{preset.label}</h3>
-                  </div>
-                  <div className="muted">{preset.filename}</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <a className="chip" href={preset.url} target="_blank" rel="noreferrer">
-                      ダウンロード
-                    </a>
-                    <audio src={preset.url} controls style={{ width: '100%' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
           <button type="button" onClick={handleUpload} disabled={uploadStatus === 'loading'}>
             {uploadStatus === 'loading' ? 'アップロード中...' : '参照音声をアップロード'}
           </button>
