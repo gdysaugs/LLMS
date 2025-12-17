@@ -92,10 +92,11 @@ Scenario: ${c.scenario}
 Task: Write a Japanese ASMR voice script spoken by ${c.name} toward ${c.listener}.
 Rules:
 - ${paragraphs} 行のセリフのみを改行で並べる。必ず ${paragraphs} 行出し切るまで終わらない。空行は禁止。
-- 各行は1文だけ。行頭に数字・記号・行番号を付けない。数字を含む行は書かない。
+- 各行は1文だけ。行頭に数字・記号・行番号を付けない。数字は行頭以外なら可。
 - 心の声・効果音・括弧やト書き・メタな締め文は一切禁止。END や 「終わり」も禁止。
 - 他の登場人物やリスナーのセリフは書かない。モノローグのみ。
 - 句読点以外の記号・絵文字（♡♪★など）や括弧類（()[]{}<>『』〝〟）は使わない。
+- 漢字を減らし、できるだけひらがな・カタカナ中心で書く。
 - 翻訳やローマ字は書かない。行数に到達したらそのまま終了する.
 Do not break character. Do not include translation or romaji.`
   }
@@ -340,7 +341,7 @@ Do not break character. Do not include translation or romaji.`
             speed: sovitsSpeed,
             top_p: 1,
             temperature: 1,
-            pause_second: 0.35,
+            pause_second: 0.4,
             sample_steps: 8,
             cut: 'punctuation',
             with_prosody: false,
