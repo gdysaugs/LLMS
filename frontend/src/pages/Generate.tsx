@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import './generate.css'
 
 type CharacterPreset = {
@@ -128,6 +129,7 @@ export function Generate() {
   const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
 
   const [logs, setLogs] = useState<string[]>([])
+  const [searchParams] = useSearchParams()
 
   const selectedPreset = characterPresets.find((c) => c.id === selectedCharacter)
   const characterImage = selectedPreset?.image ?? defaultCharacterImage
@@ -190,6 +192,13 @@ export function Generate() {
     setSelectedCharacter(id)
     setCharacter({ ...found.preset, listener: listenerName })
   }
+
+  useEffect(() => {
+    const fromQuery = searchParams.get('character')
+    if (fromQuery && fromQuery !== selectedCharacter && characterPresets.some((c) => c.id === fromQuery)) {
+      applyCharacter(fromQuery)
+    }
+  }, [searchParams, selectedCharacter])
 
   const applyScene = (id: string) => {
     const found = scenePresets.find((s) => s.id === id)
