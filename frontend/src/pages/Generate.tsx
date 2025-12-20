@@ -232,6 +232,17 @@ export function Generate() {
     throw last instanceof Error ? last : new Error(String(last ?? 'fetch failed'))
   }
 
+  const extractLlamaText = (json: any, prompt: string) => {
+    return (
+      (json?.output?.text as string) ||
+      (json?.output?.result as string) ||
+      (json?.result as string) ||
+      (json?.choices?.[0]?.message?.content as string) ||
+      (json?.text as string) ||
+      prompt
+    )
+  }
+
   const runLlama = async () => {
     setLlamaStatus('loading')
     setResultUrl(null)
@@ -272,12 +283,7 @@ export function Generate() {
       }
       if (!res) throw lastErr ?? new Error('LLM endpoint unreachable')
       const json = await res.json()
-      const text =
-        (json.output?.text as string) ||
-        (json.output?.result as string) ||
-        (json.result as string) ||
-        (json.choices?.[0]?.message?.content as string) ||
-        ''
+      const text = extractLlamaText(json, prompt)
 
       if (text) {
         const cleaned = sanitizeScript(text)
@@ -304,12 +310,7 @@ export function Generate() {
             }
           }
           if (!sj) throw new Error('LLM ステータス取得に失敗しました')
-          const content =
-            (sj.output?.text as string) ||
-            (sj.output?.result as string) ||
-            (sj.result as string) ||
-            (sj.choices?.[0]?.message?.content as string) ||
-            ''
+          const content = extractLlamaText(sj, prompt)
           if (content) {
             const cleaned = sanitizeScript(content)
             const finalScript = cleaned || content || prompt
