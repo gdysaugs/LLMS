@@ -122,6 +122,31 @@ a {
   gap: 8px;
 }
 
+.avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 6px 10px 6px 6px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.avatar-btn img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.avatar-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .primary,
 button.primary {
   border: none;

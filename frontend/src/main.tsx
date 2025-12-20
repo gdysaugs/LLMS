@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { Generate } from './pages/Generate'
+import { Profile } from './pages/Profile'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,6 +14,8 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<App />} />
         {/* ASMR音声生成スタジオ */}
         <Route path="/generate" element={<Generate />} />
+        {/* プロフィール */}
+        <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

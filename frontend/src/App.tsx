@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import './App.css'
@@ -7,6 +7,7 @@ import { isAuthConfigured, supabase } from './lib/supabaseClient'
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi'
 const OAUTH_REDIRECT_URL =
   import.meta.env.VITE_SUPABASE_REDIRECT_URL ?? (typeof window !== 'undefined' ? window.location.origin : undefined)
+const defaultAvatar = '/media/default-avatar.png'
 
 type Feature = { title: string; body: string; tag: string }
 type CharacterCard = {
@@ -84,6 +85,10 @@ function App() {
   const [billingStatus, setBillingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [billingBalance, setBillingBalance] = useState<number | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
+  const userAvatar = useMemo(
+    () => ((session?.user?.user_metadata as any)?.avatar_url as string | undefined) || defaultAvatar,
+    [session],
+  )
 
   useEffect(() => {
     if (!supabase) return
@@ -232,6 +237,7 @@ function App() {
 
   const isAuthenticated = Boolean(session?.access_token)
   const userEmail = session?.user?.email ?? ''
+  const goProfile = () => navigate('/profile')
 
   const openCharacter = (id: string) => navigate(`/generate?character=${id}`)
 
@@ -254,14 +260,26 @@ function App() {
           <a href="#auth">Account</a>
           <a href="#how">How to</a>
         </nav>
-        <div className="top-actions">
-          <button className="ghost" onClick={() => document.getElementById('auth')?.scrollIntoView({ behavior: 'smooth' })}>
-            ログイン
-          </button>
-          <button className="primary" onClick={() => openCharacter('hina')}>
-            すぐに生成
-          </button>
-        </div>
+        {isAuthenticated ? (
+          <div className="top-actions">
+            <button className="ghost" onClick={() => openCharacter('hina')}>
+              スタジオへ
+            </button>
+            <button className="avatar-btn" onClick={goProfile}>
+              <img src={userAvatar} alt="avatar" />
+              <span className="avatar-name">{userEmail || 'Account'}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="top-actions">
+            <button className="ghost" onClick={() => document.getElementById('auth')?.scrollIntoView({ behavior: 'smooth' })}>
+              ログイン
+            </button>
+            <button className="primary" onClick={() => openCharacter('hina')}>
+              すぐに生成
+            </button>
+          </div>
+        )}
       </header>
 
       <section className="hero-crush">
