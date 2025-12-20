@@ -1,6 +1,21 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import './generate.css'
 
+type CharacterPreset = {
+  id: string
+  label: string
+  image: string
+  preset: {
+    name: string
+    role: string
+    traits: string
+    style: string
+    boundaries: string
+    listener: string
+    scenario: string
+  }
+}
+
 type TaskRecord = {
   status?: string
   state?: string
@@ -14,6 +29,7 @@ const formatLogTime = () => new Date().toLocaleTimeString(undefined, { hour12: f
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const defaultModelPath = '/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf'
+const defaultCharacterImage = '/media/character.png'
 
 export function Generate() {
   const API_GATEWAY_BASE = null
@@ -31,10 +47,11 @@ export function Generate() {
   }, [API_GATEWAY_BASE])
   const API_KEY = import.meta.env.VITE_API_KEY
 
-  const characterPresets = [
+  const characterPresets: CharacterPreset[] = [
     {
       id: 'hina',
       label: '陽菜 (優しくてシャイな後輩)',
+      image: '/media/hina.png',
       preset: {
         name: '陽菜',
         role: '優しくてシャイな学校の後輩',
@@ -48,6 +65,7 @@ export function Generate() {
     {
       id: 'rion',
       label: 'リオン (強気な同級生)',
+      image: '/media/rion.png',
       preset: {
         name: 'リオン',
         role: '強気で口調が荒い女同級生',
@@ -66,9 +84,9 @@ export function Generate() {
   ]
 
   const actionPresets = [
-    { id: 'hug', label: 'レイプ', hint: 'ユーザーに無理やり犯される' },
-    { id: 'cry', label: 'フェラ', hint: 'ユーザーをフェラする　じゅぽっ、じゅるるっじゅぽぽっ、ちゅぱっなどの擬音出す' },
-    { id: 'hand', label: '中だし', hint: 'ユーザーに中だしされる' },
+    { id: 'hug', label: 'レイプ', hint: 'リスナーに無理やり犯される' },
+    { id: 'cry', label: 'フェラ', hint: 'リスナーをフェラする　じゅぽっ、じゅるるっじゅぽぽっ、ちゅぱっなどの擬音出す' },
+    { id: 'hand', label: '中だし', hint: 'リスナーに中だしされる' },
   ]
 
   const [selectedCharacter, setSelectedCharacter] = useState(characterPresets[0].id)
@@ -76,20 +94,31 @@ export function Generate() {
   const [character, setCharacter] = useState({ ...characterPresets[0].preset, listener: 'あなた' })
   const [selectedScene, setSelectedScene] = useState(scenePresets[0].id)
   const [selectedActions, setSelectedActions] = useState<string[]>([])
-  const [paragraphs, setParagraphs] = useState(6)
-  const [scriptHint, setScriptHint] = useState('シーンと行動を選んでください')
+  const paragraphCount = 6
   const [scriptText, setScriptText] = useState('')
   const [llamaStatus, setLlamaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [llamaTemp, setLlamaTemp] = useState(0.85)
 
-  const fixedAudioKey = 'sampleaudio/hello2.mp3'
-  const fixedAudioUrl: string | null = null
-  const fixedAudioLabel = 'llm/sampleaudio/hello2.mp3'
+  const fixedAudio = useMemo(() => {
+    if (selectedCharacter === 'rion') {
+      return {
+        key: 'sampleaudio/moushiwakegozaimasenn_02.wav',
+        url: null as string | null,
+        label: 'sampleaudio/moushiwakegozaimasenn_02.wav',
+      }
+    }
+    return {
+      key: 'sampleaudio/hello2.mp3',
+      url: null as string | null,
+      label: 'sampleaudio/hello2.mp3',
+    }
+  }, [selectedCharacter])
+
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('success')
-  const [uploadMessage, setUploadMessage] = useState(`固定参照音声を利用: ${fixedAudioLabel}`)
-  const [uploadedKey, setUploadedKey] = useState<string | null>(fixedAudioKey)
-  const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(fixedAudioUrl)
+  const [uploadMessage, setUploadMessage] = useState(`固定参照音声を利用: ${fixedAudio.label}`)
+  const [uploadedKey, setUploadedKey] = useState<string | null>(fixedAudio.key)
+  const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(fixedAudio.url)
 
   const [sovitsStatus, setSovitsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [sovitsMessage, setSovitsMessage] = useState('')
@@ -100,6 +129,11 @@ export function Generate() {
 
   const [logs, setLogs] = useState<string[]>([])
 
+  const selectedPreset = characterPresets.find((c) => c.id === selectedCharacter)
+  const characterImage = selectedPreset?.image ?? defaultCharacterImage
+  const characterRoleText = character.role || selectedPreset?.preset.role || ''
+  const characterTraitsText = character.traits || selectedPreset?.preset.traits || ''
+
   const appendLog = (message: string) =>
     setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
 
@@ -108,6 +142,14 @@ export function Generate() {
       if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl)
     }
   }, [resultObjectUrl])
+
+  useEffect(() => {
+    // キャラ変更時に参照音声を同期
+    setUploadStatus('success')
+    setUploadMessage(`固定参照音声を利用: ${fixedAudio.label}`)
+    setUploadedKey(fixedAudio.key)
+    setUploadedPublicUrl(fixedAudio.url)
+  }, [fixedAudio])
 
   const ensureApiKey = () => {
     if (!API_KEY) throw new Error('VITE_API_KEY が未設定です (X-Api-Key/Bearer 用)')
@@ -136,13 +178,11 @@ export function Generate() {
       `話し方: ${character.style}`,
       `守ること: ${character.boundaries}`,
       `シーン: ${sceneText}`,
-      `行動ヒント: ${actionText || scriptHint || '選択に合わせて臨機応変に'}`,
+      `行動ヒント: ${actionText || '選択に合わせて臨機応変に'}`,
       `必ずリスナーを「${listenerName}」と名前で呼びかける。相手のセリフやラベル、記号、括弧は書かない。説明文やナレーションも書かない。セリフのみで500文字以上。`,
     ]
     return lines.join('\n')
   }
-
-  const promptPreview = buildUserInput()
 
   const applyCharacter = (id: string) => {
     const found = characterPresets.find((c) => c.id === id)
@@ -191,7 +231,7 @@ export function Generate() {
 
     const userInput = buildUserInput()
     const prompt = ''
-    const maxTokens = Math.min(3500, Math.max(800, paragraphs * 320))
+    const maxTokens = Math.min(3500, Math.max(800, paragraphCount * 320))
     const llamaBases = makeBases(API_GATEWAY_BASE ?? API_BASE)
     const body = {
       input: {
@@ -287,8 +327,8 @@ export function Generate() {
   }
 
   const ensureUploaded = async () => {
-    const key = uploadedKey ?? fixedAudioKey
-    const public_url = uploadedPublicUrl ?? fixedAudioUrl
+    const key = uploadedKey ?? fixedAudio.key
+    const public_url = uploadedPublicUrl ?? fixedAudio.url
     setUploadedKey(key)
     setUploadedPublicUrl(public_url ?? null)
     return { key, public_url }
@@ -296,7 +336,7 @@ export function Generate() {
 
   const handleUpload = async () => {
     setUploadStatus('success')
-    setUploadMessage(`固定参照音声を利用: ${fixedAudioLabel}`)
+    setUploadMessage(`固定参照音声を利用: ${fixedAudio.label}`)
     appendLog('R2: 固定参照音声を使用（アップロード不要）')
   }
 
@@ -456,6 +496,17 @@ export function Generate() {
             <h2>1. キャラクター設定</h2>
             <span className="muted">システムプロンプトに反映</span>
           </div>
+          <div className="character-preview">
+            <div className="character-portrait">
+              <img src={characterImage} alt={`${(character.name || selectedPreset?.preset.name || 'キャラクター')}のプレビュー`} />
+            </div>
+            <div className="character-meta">
+              <p className="muted">キャラプレビュー</p>
+              <h3>{character.name || selectedPreset?.preset.name || 'キャラクター'}</h3>
+              {characterRoleText && <p className="muted small">{characterRoleText}</p>}
+              {characterTraitsText && <p className="muted small">{characterTraitsText}</p>}
+            </div>
+          </div>
           <div className="field inline">
             <div className="inline-field">
               <span>キャラプリセット</span>
@@ -495,90 +546,16 @@ export function Generate() {
             <div className="muted">{selectedActions.length}/3 選択中</div>
           </div>
           <label className="field">
-            <span>キャラ名</span>
+            <span>リスナー名（呼びかける名前）</span>
             <input
-              value={character.name}
-              onChange={(e) => setCharacter({ ...character, name: e.target.value })}
-              placeholder="例: 陽菜"
+              value={listenerName}
+              onChange={(e) => {
+                setListenerName(e.target.value)
+                setCharacter((prev) => ({ ...prev, listener: e.target.value }))
+              }}
+              placeholder="例: あなた / たくみ"
             />
           </label>
-          <label className="field">
-            <span>役割 / ポジション</span>
-            <input
-              value={character.role}
-              onChange={(e) => setCharacter({ ...character, role: e.target.value })}
-              placeholder="例: 優しく寄り添う幼なじみ"
-            />
-          </label>
-          <label className="field">
-            <span>性格・特徴</span>
-            <textarea
-              value={character.traits}
-              onChange={(e) => setCharacter({ ...character, traits: e.target.value })}
-              rows={2}
-            />
-          </label>
-          <label className="field">
-            <span>話し方スタイル</span>
-            <textarea
-              value={character.style}
-              onChange={(e) => setCharacter({ ...character, style: e.target.value })}
-              rows={2}
-            />
-          </label>
-          <label className="field">
-            <span>境界・守ってほしいこと</span>
-            <textarea
-              value={character.boundaries}
-              onChange={(e) => setCharacter({ ...character, boundaries: e.target.value })}
-              rows={2}
-            />
-          </label>
-          <div className="field inline">
-            <div className="inline-field">
-              <span>リスナー名（呼びかける名前）</span>
-              <input
-                value={listenerName}
-                onChange={(e) => {
-                  setListenerName(e.target.value)
-                  setCharacter((prev) => ({ ...prev, listener: e.target.value }))
-                }}
-                placeholder="例: あなた / たくみ"
-              />
-            </div>
-            <div className="inline-field">
-              <span>想定シーン</span>
-              <input
-                value={character.scenario}
-                onChange={(e) => setCharacter({ ...character, scenario: e.target.value })}
-                placeholder="例: 就寝前の囁き"
-              />
-            </div>
-          </div>
-          <div className="field">
-            <span>台本長さ (段落数)</span>
-            <input
-              type="range"
-              min={3}
-              max={200}
-              value={paragraphs}
-              onChange={(e) => setParagraphs(Number(e.target.value))}
-            />
-            <div className="muted">{paragraphs} 段落くらい（最大200段落）</div>
-          </div>
-          <label className="field">
-            <span>台本の目的・追加指示</span>
-            <textarea
-              value={scriptHint}
-              onChange={(e) => setScriptHint(e.target.value)}
-              rows={2}
-              placeholder="例: 甘やかし系で寝かしつける"
-            />
-          </label>
-          <div className="field">
-            <span>送信されるプロンプト (user_input)</span>
-            <textarea value={promptPreview} readOnly rows={8} />
-          </div>
         </section>
 
         <section className="card">
@@ -626,7 +603,7 @@ export function Generate() {
               onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
             />
             <p className="muted">{audioFile ? audioFile.name : '固定参照音声を使うため未選択でOK'}</p>
-            <p className="muted">常に {fixedAudioLabel} を使用します。アップロードは不要です。</p>
+            <p className="muted">常に {fixedAudio.label} を使用します。アップロードは不要です。</p>
           </label>
           <button type="button" onClick={handleUpload} disabled={uploadStatus === 'loading'}>
             {uploadStatus === 'loading' ? '準備中...' : '固定参照音声を使う'}
