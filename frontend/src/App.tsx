@@ -86,6 +86,8 @@ function App() {
   const [billingBalance, setBillingBalance] = useState<number | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const userAvatar = useMemo(() => {
+    const localAvatar = typeof window !== 'undefined' ? localStorage.getItem('customAvatar') : null
+    if (localAvatar) return localAvatar
     const raw = ((session?.user?.user_metadata as any)?.avatar_url as string | undefined) || ''
     if (!raw || raw.includes('googleusercontent.com')) return defaultAvatar
     return raw

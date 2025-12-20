@@ -48,6 +48,7 @@ export function Profile() {
   const [plan, setPlan] = useState<BillingStatus>({ tickets: null, subscription_status: null })
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('loading')
   const [message, setMessage] = useState<string>('')
+  const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
@@ -90,21 +91,61 @@ export function Profile() {
       ((session?.user?.user_metadata as any)?.name as string | undefined) ||
       session?.user?.email?.split('@')[0] ||
       ''
-    if (metaUrl) setAvatarUrl(metaUrl)
+    if (metaUrl && !metaUrl.includes('googleusercontent.com')) setAvatarUrl(metaUrl)
     if (name) setDisplayName(name)
   }, [session])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const localAvatar = localStorage.getItem('customAvatar')
+    const localName = localStorage.getItem('customDisplayName')
+    if (localAvatar) setAvatarUrl(localAvatar)
+    if (localName) setDisplayName(localName)
+  }, [])
+
   const handleAvatarChange = (file: File | null) => {
-    if (file) {
-      const url = URL.createObjectURL(file)
-      setAvatarUrl(url)
-    } else {
+    if (!file) {
       setAvatarUrl(defaultAvatar)
+      return
     }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      setAvatarUrl(result || defaultAvatar)
+    }
+    reader.readAsDataURL(file)
   }
 
-  const handleSave = () => {
-    setMessage('保存しました（UIのみ。バックエンド更新は未接続）')
+  const handleSave = async () => {
+    try {
+      setIsSaving(true)
+      setMessage('')
+      if (typeof window !== 'undefined') {
+        if (avatarUrl && avatarUrl !== defaultAvatar) {
+          localStorage.setItem('customAvatar', avatarUrl)
+        } else {
+          localStorage.removeItem('customAvatar')
+        }
+        if (displayName) {
+          localStorage.setItem('customDisplayName', displayName)
+        } else {
+          localStorage.removeItem('customDisplayName')
+        }
+      }
+      if (session) {
+        await supabase?.auth.updateUser({
+          data: {
+            avatar_url: avatarUrl !== defaultAvatar ? avatarUrl : null,
+            name: displayName || null,
+          },
+        })
+      }
+      setMessage('保存しました')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存に失敗しました')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSignOut = async () => {
@@ -178,8 +219,8 @@ export function Profile() {
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="表示名を入力" />
             </label>
           </div>
-          <button className="primary" onClick={handleSave}>
-            保存する
+          <button className="primary" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? '保存中...' : '保存する'}
           </button>
           {message && <div className="muted">{message}</div>}
         </section>
