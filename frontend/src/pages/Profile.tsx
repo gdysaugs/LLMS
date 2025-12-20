@@ -113,7 +113,10 @@ export function Profile() {
     navigate('/')
   }
 
-  const avatarSrc = useMemo(() => avatarUrl || defaultAvatar, [avatarUrl])
+  const avatarSrc = useMemo(() => {
+    if (!avatarUrl || avatarUrl.includes('googleusercontent.com')) return defaultAvatar
+    return avatarUrl
+  }, [avatarUrl])
 
   if (!session) {
     return (
@@ -154,7 +157,13 @@ export function Profile() {
           </div>
           <div className="avatar-row">
             <div className="avatar-preview">
-              <img src={avatarSrc} alt="avatar" />
+              <img
+                src={avatarSrc}
+                alt="avatar"
+                onError={(e) => {
+                  if (e.currentTarget.src !== defaultAvatar) e.currentTarget.src = defaultAvatar
+                }}
+              />
             </div>
             <div className="avatar-actions">
               <input type="file" accept="image/*" onChange={(e) => handleAvatarChange(e.target.files?.[0] ?? null)} />

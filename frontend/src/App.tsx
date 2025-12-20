@@ -85,10 +85,11 @@ function App() {
   const [billingStatus, setBillingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [billingBalance, setBillingBalance] = useState<number | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
-  const userAvatar = useMemo(
-    () => ((session?.user?.user_metadata as any)?.avatar_url as string | undefined) || defaultAvatar,
-    [session],
-  )
+  const userAvatar = useMemo(() => {
+    const raw = ((session?.user?.user_metadata as any)?.avatar_url as string | undefined) || ''
+    if (!raw || raw.includes('googleusercontent.com')) return defaultAvatar
+    return raw
+  }, [session])
 
   useEffect(() => {
     if (!supabase) return
@@ -266,7 +267,13 @@ function App() {
               スタジオへ
             </button>
             <button className="avatar-btn" onClick={goProfile}>
-              <img src={userAvatar} alt="avatar" />
+              <img
+                src={userAvatar}
+                alt="avatar"
+                onError={(e) => {
+                  if (e.currentTarget.src !== defaultAvatar) e.currentTarget.src = defaultAvatar
+                }}
+              />
               <span className="avatar-name">{userEmail || 'Account'}</span>
             </button>
           </div>
