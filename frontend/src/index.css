@@ -1,0 +1,22 @@
+:root {
+  font-family: 'Space Grotesk', 'Zen Kaku Gothic New', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #05060c;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

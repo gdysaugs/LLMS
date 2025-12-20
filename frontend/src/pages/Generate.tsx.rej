@@ -1,0 +1,13 @@
+--- src/pages/Generate.tsx
++++ src/pages/Generate.tsx
+@@ -35,7 +35,10 @@ export function Generate() {
+   const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
+   const [status, setStatus] = useState<GenerationStatus>('idle')
+   const [message, setMessage] = useState<string>('')
+   const [loadingCandidates, setLoadingCandidates] = useState<boolean>(false)
+   const [isPlaying, setIsPlaying] = useState<boolean>(false)
+   const [previewingTrim, setPreviewingTrim] = useState<boolean>(false)
++  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
++  const [previewError, setPreviewError] = useState<string>('')
++  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false)
+ PATCH
