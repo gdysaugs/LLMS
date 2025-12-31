@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App'
 import { Generate } from './pages/Generate'
+import { LlasaTest } from './pages/LlasaTest'
 import { Profile } from './pages/Profile'
 
 createRoot(document.getElementById('root')!).render(
@@ -14,6 +15,8 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<App />} />
         {/* ASMR音声生成スタジオ */}
         <Route path="/generate" element={<Generate />} />
+        {/* LLaSA 3B テスト */}
+        <Route path="/llasa" element={<LlasaTest />} />
         {/* プロフィール */}
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,0 +1,6 @@
+runpod==1.7.7
+transformers==4.45.2
+einops==0.8.0
+soundfile==0.12.1
+numpy>=2.0.2
+openai-whisper==20231117
