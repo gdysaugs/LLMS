@@ -124,10 +124,11 @@ export function LlasaTest() {
   const canGenerate = Boolean(referenceFile && targetText.trim()) && !isGenerating
   const endpointConfigured = Boolean(ENDPOINT_BASE)
   const usingProxy = Boolean(RUNPOD_ENDPOINT_BASE)
-  const authHeaders = useMemo(
-    () => (RUNPOD_API_KEY ? { Authorization: `Bearer ${RUNPOD_API_KEY}` } : {}),
-    [],
-  )
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {}
+    if (RUNPOD_API_KEY) headers.Authorization = `Bearer ${RUNPOD_API_KEY}`
+    return headers
+  }, [])
 
   const appendLog = (line: string) => {
     setLogLines((prev) => [...prev.slice(-180), `${new Date().toISOString()} ${line}`])
