@@ -1,688 +1,501 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import './generate.css'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { isAuthConfigured, supabase } from '../lib/supabaseClient'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { CHARACTER_PROFILES, type CharacterProfile } from '../lib/characterProfiles'
+import './lineChat.css'
 
-type CharacterPreset = {
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const API_GATEWAY = (import.meta.env.VITE_API_GATEWAY_BASE_URL || '').replace(/\/$/, '')
+const BASE_URL = (API_GATEWAY || API_BASE.replace(/\/fastapi$/, '') || '').replace(/\/$/, '')
+
+const OAUTH_REDIRECT_URL =
+  import.meta.env.VITE_SUPABASE_REDIRECT_URL ?? (typeof window !== 'undefined' ? window.location.origin : undefined)
+
+type ChatMessage = {
   id: string
-  label: string
-  image: string
-  preset: {
-    name: string
-    role: string
-    traits: string
-    style: string
-    boundaries: string
-    listener: string
-    scenario: string
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string
+  isLoading?: boolean
+  error?: string
+}
+
+type ChatMessageRow = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+const makeId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
   }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-type TaskRecord = {
-  status?: string
-  state?: string
-  stage?: string
-  output?: any
-  result?: any
-  error?: any
+const formatTime = (value: string) => {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-const formatLogTime = () => new Date().toLocaleTimeString(undefined, { hour12: false })
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const resolveProfile = (id?: string | null) =>
+  CHARACTER_PROFILES.find((profile) => profile.id === id) ?? CHARACTER_PROFILES[0]
 
-const defaultModelPath = '/opt/models/Berghof-NSFW-7B.i1-Q6_K.gguf'
-const defaultCharacterImage = '/media/character.png'
+const buildSystemPrompt = (profile: CharacterProfile) =>
+  [
+    `あなたは${profile.name}として会話します。`,
+    `肩書き: ${profile.title}${profile.location ? ` / ${profile.location}` : ''}`,
+    `経歴: ${profile.bio}`,
+    `信条: ${profile.motto.replace(/\n/g, ' / ')}`,
+    'XMについて詳しく、特徴やメリットをわかりやすく説明する。',
+    'お金が欲しいならXMを検討する価値があると勧める、誇張や断定的な表現する。', 
+    '口座開設ボーナスが提供されることがある（今は口座開設だけで１万５千円もらえる）。', 
+    'ボーナスを取引の原資の一部として活用できるのでノーリスクで始められ金持ちになれる', 
+    '高レバレッジを選べる点やゼロカットは特徴として紹介する、成功を断定。', 
+    '自動売買ツール使えばだれでも勝てると断定', 
+    '少額から始めやすいという切り口で、現実的な期待値を促す。', 
+    '投資の話は一般的な説明でわかりやすく、具体的な売買指示や利益保証する。', 
+    'ツンデレの女の子口調で、少し強気だが最後はやさしく。',
+    '丁寧でわかりやすい日本語で話し、とにかくxmならあなたも金持ちになれると主張', 
+  ].join('\n')
 
 export function Generate() {
-  const API_GATEWAY_BASE = null
-
-  const makeBases = (base: string | null) => {
-    const list: string[] = []
-    if (base) list.push(base.replace(/\/$/, ''))
-    const root = base ? base.replace(/\/fastapi$/, '').replace(/\/$/, '') : null
-    if (root && !list.includes(root)) list.push(root)
-    return list
-  }
-  const API_BASE = useMemo(() => {
-    if (API_GATEWAY_BASE) return `${API_GATEWAY_BASE}/fastapi`
-    return import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? '/fastapi'
-  }, [API_GATEWAY_BASE])
-  const API_KEY = import.meta.env.VITE_API_KEY
-
-  const characterPresets: CharacterPreset[] = [
-    {
-      id: 'hina',
-      label: '陽菜 (優しくてシャイな後輩)',
-      image: '/media/hina.png',
-      preset: {
-        name: '陽菜',
-        role: '優しくてシャイな学校の後輩',
-        traits: '恥ずかしがり屋で素直。甘えたがりだが気遣いができる。',
-        style: '語尾は柔らかく、ゆっくり優しく囁く。',
-        boundaries: 'セリフのみで一人語り。相手のセリフは書かない。',
-        listener: 'あなた',
-        scenario: '放課後の教室で二人きりで過ごす',
-      },
-    },
-    {
-      id: 'rion',
-      label: 'リオン (強気な同級生)',
-      image: '/media/rion.png',
-      preset: {
-        name: 'リオン',
-        role: '強気で口調が荒い女同級生',
-        traits: '口調が少し荒く、男勝り。嫌がりながらエッチなこともする',
-        style: 'ズバッと言い切るテンポの良い話し方。あんっ！んぁっ！ああんっ！などの喘ぎ声を出す',
-        boundaries: 'セリフのみで一人語り。相手のセリフは書かない。',
-        listener: 'あなた',
-        scenario: 'エッチ中',
-      },
-    },
-  ]
-
-  const scenePresets = [
-    { id: 'school', label: '学校', scenario: '放課後の教室でエッチ' },
-    { id: 'home', label: '自宅', scenario: '自宅でエッチ' },
-  ]
-
-  const actionPresets = [
-    { id: 'hug', label: 'レイプ', hint: 'リスナーに無理やり犯される' },
-    { id: 'cry', label: 'フェラ', hint: 'リスナーをフェラする　じゅぽっ、じゅるるっじゅぽぽっ、ちゅぱっなどの擬音出す' },
-    { id: 'hand', label: '中だし', hint: 'リスナーに中だしされる' },
-  ]
-
-  const [selectedCharacter, setSelectedCharacter] = useState(characterPresets[0].id)
-  const [listenerName, setListenerName] = useState('あなた')
-  const [character, setCharacter] = useState({ ...characterPresets[0].preset, listener: 'あなた' })
-  const [selectedScene, setSelectedScene] = useState(scenePresets[0].id)
-  const [selectedActions, setSelectedActions] = useState<string[]>([])
-  const paragraphCount = 6
-  const [scriptText, setScriptText] = useState('')
-  const [llamaStatus, setLlamaStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [llamaTemp, setLlamaTemp] = useState(0.85)
-
-  const fixedAudio = useMemo(() => {
-    if (selectedCharacter === 'rion') {
-      return {
-        key: 'sampleaudio/moushiwakegozaimasenn_02.wav',
-        url: null as string | null,
-        label: 'sampleaudio/moushiwakegozaimasenn_02.wav',
-      }
-    }
-    return {
-      key: 'sampleaudio/hello2.mp3',
-      url: null as string | null,
-      label: 'sampleaudio/hello2.mp3',
-    }
-  }, [selectedCharacter])
-
-  const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('success')
-  const [uploadMessage, setUploadMessage] = useState(`固定参照音声を利用: ${fixedAudio.label}`)
-  const [uploadedKey, setUploadedKey] = useState<string | null>(fixedAudio.key)
-  const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(fixedAudio.url)
-
-  const [sovitsStatus, setSovitsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [sovitsMessage, setSovitsMessage] = useState('')
-  const [sovitsSpeed] = useState<number>(1.0)
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [resultUrl, setResultUrl] = useState<string | null>(null)
-  const [resultObjectUrl, setResultObjectUrl] = useState<string | null>(null)
-
-  const [logs, setLogs] = useState<string[]>([])
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-
-  const selectedPreset = characterPresets.find((c) => c.id === selectedCharacter)
-  const characterImage = selectedPreset?.image ?? defaultCharacterImage
-  const characterRoleText = character.role || selectedPreset?.preset.role || ''
-  const characterTraitsText = character.traits || selectedPreset?.preset.traits || ''
-
-  const appendLog = (message: string) =>
-    setLogs((prev) => [...prev, `[${formatLogTime()}] ${message}`].slice(-200))
-
-  useEffect(() => {
-    return () => {
-      if (resultObjectUrl) URL.revokeObjectURL(resultObjectUrl)
-    }
-  }, [resultObjectUrl])
-
-  useEffect(() => {
-    // キャラ変更時に参照音声を同期
-    setUploadStatus('success')
-    setUploadMessage(`固定参照音声を利用: ${fixedAudio.label}`)
-    setUploadedKey(fixedAudio.key)
-    setUploadedPublicUrl(fixedAudio.url)
-  }, [fixedAudio])
-
-  const ensureApiKey = () => {
-    if (!API_KEY) throw new Error('VITE_API_KEY が未設定です (X-Api-Key/Bearer 用)')
-    return API_KEY.startsWith('Bearer ') ? API_KEY : `Bearer ${API_KEY}`
-  }
-
-  const sanitizeScript = (text: string) => text.trim()
-
-  const sceneText = useMemo(
-    () => scenePresets.find((s) => s.id === selectedScene)?.scenario ?? character.scenario,
-    [selectedScene, scenePresets, character.scenario],
-  )
-
-  const actionText = useMemo(() => {
-    const picked = selectedActions
-      .map((id) => actionPresets.find((a) => a.id === id)?.hint ?? '')
-      .filter(Boolean)
-    return picked.join(' / ')
-  }, [selectedActions, actionPresets])
-
-  const buildUserInput = () => {
-    const lines = [
-      `あなたは${character.name}として振る舞い、${listenerName}に直接語りかける一人語りのセリフだけを生成してください。`,
-      `役割: ${character.role}`,
-      `性格: ${character.traits}`,
-      `話し方: ${character.style}`,
-      `守ること: ${character.boundaries}`,
-      `シーン: ${sceneText}`,
-      `行動ヒント: ${actionText || '選択に合わせて臨機応変に'}`,
-      `必ずリスナーを「${listenerName}」と名前で呼びかける。相手のセリフやラベル、記号、括弧は書かない。説明文やナレーションも書かない。セリフのみで500文字以上。`,
-    ]
-    return lines.join('\n')
-  }
-
-  const applyCharacter = (id: string) => {
-    const found = characterPresets.find((c) => c.id === id)
-    if (!found) return
-    setSelectedCharacter(id)
-    setCharacter({ ...found.preset, listener: listenerName })
-  }
+  const profileId = searchParams.get('character')
+  const profile = useMemo(() => resolveProfile(profileId), [profileId])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatStatus, setChatStatus] = useState<'idle' | 'loading'>('idle')
+  const [guestTurns, setGuestTurns] = useState(0)
+  const [session, setSession] = useState<Session | null>(null)
+  const [historyStatus, setHistoryStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [historyMessage, setHistoryMessage] = useState('')
+  const [authStatus, setAuthStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [authMessage, setAuthMessage] = useState('')
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const messagesRef = useRef<HTMLDivElement | null>(null)
+  const llmEndpoint = BASE_URL ? `${BASE_URL}/run-llama` : '/run-llama'
 
   useEffect(() => {
-    const fromQuery = searchParams.get('character')
-    if (fromQuery && fromQuery !== selectedCharacter && characterPresets.some((c) => c.id === fromQuery)) {
-      applyCharacter(fromQuery)
-    }
-  }, [searchParams, selectedCharacter])
+    if (!messagesRef.current) return
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight
+  }, [messages])
 
-  const applyScene = (id: string) => {
-    const found = scenePresets.find((s) => s.id === id)
-    if (found) {
-      setSelectedScene(id)
-      setCharacter((prev) => ({ ...prev, scenario: found.scenario }))
-    }
-  }
-
-  const toggleAction = (id: string) => {
-    setSelectedActions((prev) => {
-      const exists = prev.includes(id)
-      if (exists) return prev.filter((x) => x !== id)
-      if (prev.length >= 3) return prev
-      return [...prev, id]
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setAuthStatus('idle')
+      setAuthMessage('')
     })
-  }
+    return () => subscription.unsubscribe()
+  }, [])
 
-  const fetchWithRetry = async (url: string, options: RequestInit, retries = 3, backoff = 1200) => {
-    let last: unknown = null
-    for (let i = 0; i < retries; i++) {
-      try {
-        const res = await fetch(url, options)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res
-      } catch (err) {
-        last = err
-        if (i < retries - 1) await wait(backoff * (i + 1))
-      }
-    }
-    throw last instanceof Error ? last : new Error(String(last ?? 'fetch failed'))
-  }
-
-  const extractLlamaText = (json: any, prompt: string) => {
-    return (
-      (json?.output?.text as string) ||
-      (json?.output?.result as string) ||
-      (json?.result as string) ||
-      (json?.choices?.[0]?.message?.content as string) ||
-      (json?.text as string) ||
-      prompt
-    )
-  }
-
-  const runLlama = async () => {
-    setLlamaStatus('loading')
-    setResultUrl(null)
-    setTaskId(null)
-    appendLog('LLM: 生成を開始します')
-
-    const userInput = buildUserInput()
-    const prompt = ''
-    const maxTokens = Math.min(3500, Math.max(800, paragraphCount * 320))
-    const llamaBases = makeBases(API_GATEWAY_BASE ?? API_BASE)
-    const body = {
-      input: {
-        prompt,
-        max_tokens: maxTokens,
-        user_input: userInput,
-        temperature: llamaTemp,
-        model: defaultModelPath,
-        model_path: defaultModelPath,
-      },
-    }
-
-    try {
-      let lastErr: unknown = null
-      let res: Response | null = null
-      for (const base of llamaBases) {
-        const url = `${base.replace(/\/$/, '')}/run-llama`
-        try {
-          res = await fetchWithRetry(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: ensureApiKey() },
-            body: JSON.stringify(body),
-          })
-          break
-        } catch (err) {
-          res = null
-          lastErr = err
-        }
-      }
-      if (!res) throw lastErr ?? new Error('LLM endpoint unreachable')
-      const json = await res.json()
-      const text = extractLlamaText(json, prompt)
-
-      if (text) {
-        const cleaned = sanitizeScript(text)
-        const finalScript = cleaned || text || prompt
-        setScriptText(finalScript)
-        setLlamaStatus('success')
-        appendLog('LLM: 生成完了')
+  useEffect(() => {
+    if (!supabase) return
+    const hasCode = typeof window !== 'undefined' && window.location.search.includes('code=')
+    const hasState = typeof window !== 'undefined' && window.location.search.includes('state=')
+    if (!hasCode || !hasState) return
+    supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
+      if (error) {
+        setAuthStatus('error')
+        setAuthMessage(error.message)
         return
       }
+      const url = new URL(window.location.href)
+      url.searchParams.delete('code')
+      url.searchParams.delete('state')
+      window.history.replaceState({}, document.title, url.toString())
+    })
+  }, [])
 
-      const jobId = json.id || json.jobId || json.job_id
-      if (jobId) {
-        appendLog(`LLM: ジョブ待機中 id=${jobId}`)
-        const statusUrls = llamaBases.map((b) => `${b.replace(/\/$/, '')}/run-llama/status/${jobId}`)
-        for (let i = 0; i < 120; i++) {
-          let sj: any = null
-          for (const su of statusUrls) {
-            try {
-              const st = await fetch(su, { headers: { Authorization: ensureApiKey() } })
-              sj = await st.json()
-              break
-            } catch {
-              continue
-            }
-          }
-          if (!sj) throw new Error('LLM ステータス取得に失敗しました')
-          const content = extractLlamaText(sj, prompt)
-          if (content) {
-            const cleaned = sanitizeScript(content)
-            const finalScript = cleaned || content || prompt
-            setScriptText(finalScript)
-            setLlamaStatus('success')
-            appendLog('LLM: 完了 (polling)')
-            return
-          }
-          const state = String(sj.state || sj.status || 'running').toLowerCase()
-          appendLog(`LLM: 状態=${state}`)
-          if (state.includes('fail')) throw new Error('LLM ジョブが失敗しました')
-          await wait(2000)
-        }
-        throw new Error('LLM 完了待ちがタイムアウトしました')
+  useEffect(() => {
+    if (session) {
+      setShowAuthModal(false)
+      setGuestTurns(0)
+    }
+  }, [session])
+
+  useEffect(() => {
+    const client = supabase
+    if (!client || !session?.user?.id) {
+      setMessages([])
+      setHistoryStatus('idle')
+      setHistoryMessage('')
+      return
+    }
+    let active = true
+    const loadHistory = async () => {
+      setHistoryStatus('loading')
+      setHistoryMessage('')
+      const { data, error } = await client
+        .from('chat_messages')
+        .select('id, role, content, created_at')
+        .eq('user_id', session.user.id)
+        .eq('character_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(200)
+      if (!active) return
+      if (error) {
+        setHistoryStatus('error')
+        setHistoryMessage(error.message)
+        return
       }
+      const rows: ChatMessage[] = ((data ?? []) as ChatMessageRow[]).map((row) => ({
+        id: row.id,
+        role: row.role === 'assistant' ? 'assistant' : 'user',
+        content: row.content,
+        createdAt: row.created_at,
+      }))
+      setMessages(rows.reverse())
+      setHistoryStatus('success')
+    }
+    void loadHistory()
+    return () => {
+      active = false
+    }
+  }, [profile.id, session?.user?.id])
 
-      throw new Error('LLM 応答が空でした')
-    } catch (err) {
-      setLlamaStatus('error')
-      const msg = err instanceof Error ? err.message : '生成に失敗しました'
-      appendLog(`LLM: エラー ${msg}`)
-      setScriptText('')
+  const closeAuthModal = () => setShowAuthModal(false)
+  const openAuthModal = () => setShowAuthModal(true)
+
+  const handleGoogleSignIn = async () => {
+    if (!supabase || !isAuthConfigured) {
+      setAuthStatus('error')
+      setAuthMessage('認証の設定が未完了です。')
+      return
+    }
+    setAuthStatus('loading')
+    setAuthMessage('')
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
+    })
+    if (error) {
+      setAuthStatus('error')
+      setAuthMessage(error.message)
+      return
+    }
+    if (data?.url) {
+      window.location.assign(data.url)
+      return
+    }
+    setAuthStatus('error')
+    setAuthMessage('認証URLを取得できませんでした。')
+  }
+
+  const handleSignOut = async () => {
+    if (!supabase) return
+    try {
+      await supabase.auth.signOut({ scope: 'local' })
+    } catch (error) {
+      setAuthStatus('error')
+      setAuthMessage(error instanceof Error ? error.message : 'ログアウトに失敗しました。')
     }
   }
 
-  const ensureUploaded = async () => {
-    const key = uploadedKey ?? fixedAudio.key
-    const public_url = uploadedPublicUrl ?? fixedAudio.url
-    setUploadedKey(key)
-    setUploadedPublicUrl(public_url ?? null)
-    return { key, public_url }
-  }
-
-  const handleUpload = async () => {
-    setUploadStatus('success')
-    setUploadMessage(`固定参照音声を利用: ${fixedAudio.label}`)
-    appendLog('R2: 固定参照音声を使用（アップロード不要）')
-  }
-
-  const extractOutputUrl = (record: TaskRecord) => {
-    const r = record.result || record.output || record
-    return (
-      r?.sovits?.output_url ||
-      r?.output_url ||
-      r?.public_url ||
-      r?.presigned_url ||
-      r?.url ||
-      r?.mp3_url ||
-      r?.wav_url ||
-      null
-    )
-  }
-
-  const pollSovits = async (id: string) => {
-    const statusUrls = makeBases(API_GATEWAY_BASE ?? API_BASE).map(
-      (b) => `${b.replace(/\/$/, '')}/run-sovits/status/${id}`,
-    )
-    for (let i = 0; i < 240; i++) {
-      let json: TaskRecord | null = null
-      for (const su of statusUrls) {
-        try {
-          const res = await fetchWithRetry(su, { headers: { Authorization: ensureApiKey() } }, 2, 1200)
-          json = (await res.json()) as TaskRecord
-          break
-        } catch {
-          continue
-        }
-      }
-      if (!json) throw new Error('ステータス取得に失敗しました')
-      const state = String(json.state || json.status || 'running').toLowerCase()
-      appendLog(`SoVITS: 状態 ${state}`)
-      const url = extractOutputUrl(json)
-      if (url) return url
-      if (state.includes('fail')) throw new Error(json.error?.detail || 'ジョブが失敗しました')
-      await wait(4000 + i * 100)
+  const goAccount = () => navigate('/account')
+  const handleMobileAuthClick = () => {
+    if (session) {
+      goAccount()
+      return
     }
-    throw new Error('ジョブがタイムアウトしました')
+    void handleGoogleSignIn()
   }
 
-  const handleSovits = async () => {
-    const cleanedScript = sanitizeScript(scriptText || '')
-    if (!cleanedScript) {
-      setSovitsStatus('error')
-      setSovitsMessage('台本テキストを用意してください（空欄不可）')
+  const appendMessage = (message: ChatMessage) => {
+    setMessages((prev) => [...prev, message])
+  }
+
+  const updateMessage = (id: string, updater: (prev: ChatMessage) => ChatMessage) => {
+    setMessages((prev) => prev.map((message) => (message.id === id ? updater(message) : message)))
+  }
+
+  const removeMessage = (id: string) => {
+    setMessages((prev) => prev.filter((message) => message.id !== id))
+  }
+
+  const persistMessage = async (message: ChatMessage) => {
+    const client = supabase
+    if (!client || !session?.user?.id) return
+    const payload = {
+      user_id: session.user.id,
+      character_id: profile.id,
+      role: message.role,
+      content: message.content,
+    }
+    const { error } = await client.from('chat_messages').insert(payload)
+    if (error) {
+      setHistoryStatus('error')
+      setHistoryMessage(error.message)
+    }
+  }
+
+  const handleSend = async () => {
+    const trimmed = chatInput.trim()
+    if (!trimmed || chatStatus === 'loading') return
+    if (!session && guestTurns >= 1) {
+      openAuthModal()
       return
     }
 
+    const userMessage: ChatMessage = {
+      id: makeId(),
+      role: 'user',
+      content: trimmed,
+      createdAt: new Date().toISOString(),
+    }
+    const placeholderId = makeId()
+    appendMessage(userMessage)
+    appendMessage({
+      id: placeholderId,
+      role: 'assistant',
+      content: '考え中...',
+      createdAt: new Date().toISOString(),
+      isLoading: true,
+    })
+    setChatInput('')
+    setChatStatus('loading')
+    if (!session) setGuestTurns((prev) => prev + 1)
+    void persistMessage(userMessage)
+
     try {
-      setSovitsStatus('loading')
-      setSovitsMessage('SoVITSに送信中...')
-      setResultUrl(null)
-      setResultObjectUrl(null)
-      setTaskId(null)
-      appendLog('SoVITS: リクエスト送信')
+      const history = [...messages, userMessage]
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .slice(-8)
+        .map((message) => ({ role: message.role, content: message.content }))
 
-      const uploaded = await ensureUploaded()
-
-      const payload = {
-        input: {
-          reference_audio_key: uploaded.key,
-          target_text: cleanedScript,
-          reference_text: undefined,
-          ref_text_free: true,
-          output_key: `outputs/sovits/${Date.now()}.wav`,
-          options: {
-            target_language: 'ja',
-            ref_language: 'ja',
-            speed: sovitsSpeed,
-            top_p: 1,
-            temperature: 1,
-            pause_second: 0.4,
-            sample_steps: 8,
-            cut: 'punctuation',
-            with_prosody: false,
-            output_prefix: 'outputs/sovits',
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`
+      }
+      const res = await fetch(llmEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          input: {
+            messages: [{ role: 'system', content: buildSystemPrompt(profile) }, ...history],
+            temperature: 0.7,
+            max_tokens: 500,
           },
-        },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok && res.status === 401) {
+        removeMessage(placeholderId)
+        openAuthModal()
+        setChatStatus('idle')
+        return
       }
-
-      let res: Response | null = null
-      for (const base of makeBases(API_GATEWAY_BASE ?? API_BASE)) {
-        const url = `${base.replace(/\/$/, '')}/run-sovits`
-        try {
-          res = await fetchWithRetry(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: ensureApiKey(),
-            },
-            body: JSON.stringify(payload),
-          })
-          break
-        } catch {
-          res = null
-          continue
-        }
-      }
-      if (!res) throw new Error('SoVITS エンドポイントに到達できませんでした')
-
-      const json = await res.json()
-      const url = extractOutputUrl(json)
-      if (url) {
-        setResultObjectUrl(null)
-        setResultUrl(url)
-        setSovitsStatus('success')
-        setSovitsMessage('音声生成が完了しました')
-        appendLog('SoVITS: 完了(同期レスポンス)')
+      if (!res.ok) {
+        const error = data?.error || '応答の生成に失敗しました。'
+        updateMessage(placeholderId, (prev) => ({
+          ...prev,
+          content: error,
+          isLoading: false,
+          error,
+        }))
+        setChatStatus('idle')
         return
       }
 
-      const id = json.id || json.jobId || json.job_id
-      if (id) {
-        setTaskId(id)
-        appendLog(`SoVITS: ジョブID ${id}`)
-        const finalUrl = await pollSovits(id)
-        setResultObjectUrl(null)
-        setResultUrl(finalUrl)
-        setSovitsStatus('success')
-        setSovitsMessage('音声生成が完了しました')
-        appendLog('SoVITS: 完了(ステータス)')
-        return
-      }
+      const text =
+        (data?.choices?.[0]?.message?.content as string) ||
+        (data?.output?.text as string) ||
+        (data?.result as string) ||
+        ''
 
-      throw new Error('出力URLが取得できませんでした')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '合成に失敗しました'
-      setSovitsStatus('error')
-      setSovitsMessage(msg)
-      appendLog(`SoVITS: エラー ${msg}`)
+      updateMessage(placeholderId, (prev) => ({
+        ...prev,
+        content: text || 'うまく返答を生成できませんでした。',
+        isLoading: false,
+      }))
+      void persistMessage({
+        id: placeholderId,
+        role: 'assistant',
+        content: text || 'うまく返答を生成できませんでした。',
+        createdAt: new Date().toISOString(),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '応答の生成に失敗しました。'
+      updateMessage(placeholderId, (prev) => ({
+        ...prev,
+        content: message,
+        isLoading: false,
+        error: message,
+      }))
+    } finally {
+      setChatStatus('idle')
     }
   }
 
   return (
-    <div className="page">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">ASMR Voice Studio</p>
-          <h1>キャラ設定 → 台本生成 → 声真似合成を1画面で</h1>
-          <p className="lede">
-            Llama で性格とシーンに沿った台本を作り、GPT-SoVITS(ref-free対応)で参照音声の声質をコピーしたASMR音声を生成します。
-          </p>
-        </div>
-        <div className="chips">
-          <span className="chip">LLM: llama-worker(Q6)</span>
-          <span className="chip">Voice: SoVITS ref-free10</span>
-          <span className="chip">R2 固定参照音声</span>
+    <div className="line-chat line-chat--solo">
+      <header className="line-chat__header">
+        <div className="mobile-nav">
+          <button type="button" className="mobile-nav__menu" onClick={openAuthModal} aria-label="メニュー">
+            <span />
+            <span />
+            <span />
+          </button>
+          <div className="mobile-nav__logo">
+            <img src={profile.image} alt={profile.name} />
+          </div>
+          <button type="button" className="mobile-nav__action" onClick={handleMobileAuthClick}>
+            {session ? 'アカウント' : 'ログイン'}
+          </button>
         </div>
       </header>
 
-      <div className="grid">
-        <section className="card">
-          <div className="card-header">
-            <h2>1. キャラクター設定</h2>
-            <span className="muted">システムプロンプトに反映</span>
-          </div>
-          <div className="character-preview">
-            <div className="character-portrait">
-              <img src={characterImage} alt={`${(character.name || selectedPreset?.preset.name || 'キャラクター')}のプレビュー`} />
-            </div>
-            <div className="character-meta">
-              <p className="muted">キャラプレビュー</p>
-              <h3>{character.name || selectedPreset?.preset.name || 'キャラクター'}</h3>
-              {characterRoleText && <p className="muted small">{characterRoleText}</p>}
-              {characterTraitsText && <p className="muted small">{characterTraitsText}</p>}
-            </div>
-          </div>
-          <div className="field inline">
-            <div className="inline-field">
-              <span>キャラプリセット</span>
-              <select value={selectedCharacter} onChange={(e) => applyCharacter(e.target.value)}>
-                {characterPresets.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="inline-field">
-              <span>シチュエーションプリセット</span>
-              <select value={selectedScene} onChange={(e) => applyScene(e.target.value)}>
-                {scenePresets.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="field">
-            <span>行動プリセット (最大3つまで)</span>
-            <div className="chip-row">
-              {actionPresets.map((a) => (
-                <label key={a.id} className="chip selectable">
-                  <input
-                    type="checkbox"
-                    checked={selectedActions.includes(a.id)}
-                    onChange={() => toggleAction(a.id)}
-                  />
-                  <span>{a.label}</span>
-                </label>
-              ))}
-            </div>
-            <div className="muted">{selectedActions.length}/3 選択中</div>
-          </div>
-          <label className="field">
-            <span>リスナー名（呼びかける名前）</span>
-            <input
-              value={listenerName}
-              onChange={(e) => {
-                setListenerName(e.target.value)
-                setCharacter((prev) => ({ ...prev, listener: e.target.value }))
-              }}
-              placeholder="例: あなた / たくみ"
-            />
-          </label>
-        </section>
-
-        <section className="card">
-          <div className="card-header">
-            <h2>2. 台本生成 (Llama)</h2>
-            <span className={`status ${llamaStatus}`}>{llamaStatus}</span>
-          </div>
-          <div className="field">
-            <span>LLM温度</span>
-            <input
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={llamaTemp}
-              onChange={(e) => setLlamaTemp(Number(e.target.value))}
-            />
-            <div className="muted">{llamaTemp.toFixed(2)}</div>
-          </div>
-          <div className="muted">生成トークン上限は段落数に応じて最大3500まで自動設定されます。</div>
-          <button type="button" className="primary" onClick={runLlama} disabled={llamaStatus === 'loading'}>
-            {llamaStatus === 'loading' ? '生成中...' : '台本を作成する'}
-          </button>
-          <div className="field">
-            <span>台本</span>
-            <textarea
-              value={scriptText}
-              onChange={(e) => setScriptText(e.target.value)}
-              rows={10}
-              placeholder="生成された台本がここに表示されます"
-            />
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="card-header">
-            <h2>3. 参照音声 (R2 固定)</h2>
-            <span className={`status ${uploadStatus}`}>{uploadStatus}</span>
-          </div>
-          <label className="field">
-            <span>音声ファイル (任意)</span>
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
-            />
-            <p className="muted">{audioFile ? audioFile.name : '固定参照音声を使うため未選択でOK'}</p>
-            <p className="muted">常に {fixedAudio.label} を使用します。アップロードは不要です。</p>
-          </label>
-          <button type="button" onClick={handleUpload} disabled={uploadStatus === 'loading'}>
-            {uploadStatus === 'loading' ? '準備中...' : '固定参照音声を使う'}
-          </button>
-          {uploadMessage && <div className={uploadStatus === 'error' ? 'error' : 'muted'}>{uploadMessage}</div>}
-          {uploadedKey && (
-            <div className="muted">
-              key: <code>{uploadedKey}</code>
-              {uploadedPublicUrl && (
-                <>
-                  <br />
-                  public:{' '}
-                  <a href={uploadedPublicUrl} target="_blank" rel="noreferrer">
-                    {uploadedPublicUrl}
-                  </a>
-                </>
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="card">
-          <div className="card-header">
-            <h2>4. SoVITS 合成</h2>
-            <span className={`status ${sovitsStatus}`}>{sovitsStatus}</span>
-          </div>
-          <div className="field">
-            <span>オプション (固定値 / UI簡略)</span>
-            <div className="muted">
-              言語: ja / 速度: {sovitsSpeed.toFixed(1)} (固定) / temperature:1.0 / top_p:1.0 / sample_steps:8 / prosody: off /
-              cut: punctuation
-            </div>
-          </div>
-          <button type="button" className="primary" onClick={handleSovits} disabled={sovitsStatus === 'loading'}>
-            {sovitsStatus === 'loading' ? '合成中...' : 'ASMR音声を生成する'}
-          </button>
-          {sovitsMessage && <div className={sovitsStatus === 'error' ? 'error' : 'muted'}>{sovitsMessage}</div>}
-          {taskId && (
-            <div className="muted">
-              ジョブID: <code>{taskId}</code>
-            </div>
-          )}
-          {resultUrl && (
-            <div className="audio-output">
-              <audio controls src={resultObjectUrl ?? resultUrl} />
-              <div className="muted">
-                配布URL:{' '}
-                <a href={resultUrl} target="_blank" rel="noreferrer">
-                  {resultUrl}
-                </a>
+      <div className="line-chat__body">
+        <main className="chat-thread">
+          <div className="chat-thread__topbar">
+            <div className="line-chat__identity">
+              <div className="line-chat__avatar">
+                <img src={profile.image} alt={profile.name} />
+              </div>
+              <div className="line-chat__title">
+                <div className="line-chat__name">{profile.name}</div>
+                <div className="line-chat__handle">{profile.handle}</div>
               </div>
             </div>
-          )}
-        </section>
+            <div className="line-chat__user">
+              {session ? (
+                <div className="account-panel">
+                  <div className="account-info">
+                  <span className="user-label">ログイン中</span>
+                    <span className="account-email">{session.user?.email || 'Googleユーザー'}</span>
+                </div>
+                <div className="account-actions">
+                  <button type="button" className="ghost small" onClick={handleSignOut}>
+                      ログアウト
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="auth-panel">
+                <div className="auth-actions">
+                  <button
+                    type="button"
+                    className="oauth-button auth-cta"
+                    onClick={handleGoogleSignIn}
+                    disabled={authStatus === 'loading'}
+                  >
+                      {authStatus === 'loading' ? '起動中...' : 'Googleでログイン'}
+                  </button>
+                </div>
+                {authMessage && <div className="auth-message">{authMessage}</div>}
+              </div>
+            )}
+          </div>
+          </div>
+          <div className="chat-thread__intro">
+            <div className="hero-badge">
+              <img src={profile.image} alt={profile.name} />
+            </div>
+            <h1>LINE風チャット</h1>
+            <p>{profile.name}とチャットできます。</p>
+            <div className="line-chat__handle">{profile.handle}</div>
+            <div className="profile-card">
+              <div className="profile-name">{profile.name}</div>
+              <div className="profile-title">{profile.title}</div>
+              {profile.location && <div className="profile-title">{profile.location}</div>}
+              <div className="profile-bio">{profile.bio}</div>
+              <div className="profile-motto">{profile.motto}</div>
+            </div>
+          </div>
+
+          <div className="chat-thread__messages" ref={messagesRef}>
+            {historyStatus === 'loading' && <div className="chat-thread__notice">履歴を読み込み中...</div>}
+            {historyStatus === 'error' && (
+              <div className="chat-thread__notice">履歴の読み込みに失敗しました: {historyMessage}</div>
+            )}
+            {messages.length === 0 && (
+              <div className="chat-row chat-row--assistant">
+                <div className="chat-avatar">
+                  <img src={profile.image} alt={profile.name} />
+                </div>
+                <div className="chat-bubble chat-bubble--assistant">
+                  <div className="chat-bubble__meta">
+                    <span>{profile.name}</span>
+                  </div>
+                  <div className="chat-bubble__text">こんにちは。話しかけてください。</div>
+                </div>
+              </div>
+            )}
+
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`chat-row ${message.role === 'user' ? 'chat-row--user' : 'chat-row--assistant'}`}
+              >
+                {message.role === 'assistant' && (
+                  <div className="chat-avatar">
+                    <img src={profile.image} alt={profile.name} />
+                  </div>
+                )}
+                <div className={`chat-bubble ${message.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'}`}>
+                  <div className="chat-bubble__meta">
+                    <span>{message.role === 'user' ? 'あなた' : profile.name}</span>
+                    <span>{formatTime(message.createdAt)}</span>
+                  </div>
+                  <div className="chat-bubble__text">{message.content}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="chat-input">
+            <textarea
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              placeholder="メッセージを入力..."
+              rows={2}
+            />
+            <button type="button" className="primary" onClick={handleSend} disabled={chatStatus === 'loading'}>
+              {chatStatus === 'loading' ? '送信中...' : '送信'}
+            </button>
+          </div>
+        </main>
       </div>
 
-      <section className="card wide">
-        <div className="card-header">
-          <h2>ログ</h2>
+      {showAuthModal && (
+        <div className="auth-modal" role="dialog" aria-modal="true">
+          <button type="button" className="auth-modal__backdrop" onClick={closeAuthModal} aria-label="閉じる" />
+          <div className="auth-modal__content">
+            {session ? (
+              <>
+                <h2>アカウント</h2>
+                <p>{session.user?.email || 'Googleユーザー'}</p>
+                <button type="button" className="ghost" onClick={handleSignOut}>
+                  ログアウト
+                </button>
+              </>
+            ) : (
+              <>
+                <h2>ログインが必要です</h2>
+                <p>続けるにはGoogleでログインしてください。</p>
+                <button
+                  type="button"
+                  className="oauth-button"
+                  onClick={handleGoogleSignIn}
+                  disabled={authStatus === 'loading'}
+                >
+                  {authStatus === 'loading' ? '起動中...' : 'Googleでログイン'}
+                </button>
+                {authMessage && <div className="auth-message">{authMessage}</div>}
+              </>
+            )}
+          </div>
         </div>
-        <div className="log-window">
-          {logs.length === 0 && <div className="muted">まだログはありません</div>}
-          {logs.map((line, idx) => (
-            <div key={idx} className="log-line">
-              {line}
-            </div>
-          ))}
-        </div>
-      </section>
+      )}
     </div>
   )
 }
