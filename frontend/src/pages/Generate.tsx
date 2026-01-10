@@ -370,31 +370,31 @@ export function Generate() {
               {session ? (
                 <div className="account-panel">
                   <div className="account-info">
-                  <span className="user-label">ログイン中</span>
+                    <span className="user-label">ログイン中</span>
                     <span className="account-email">{session.user?.email || 'Googleユーザー'}</span>
-                </div>
-                <div className="account-actions">
-                  <button type="button" className="ghost small" onClick={handleSignOut}>
+                  </div>
+                  <div className="account-actions">
+                    <button type="button" className="ghost small" onClick={handleSignOut}>
                       ログアウト
-                  </button>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="auth-panel">
-                <div className="auth-actions">
-                  <button
-                    type="button"
-                    className="oauth-button auth-cta"
-                    onClick={handleGoogleSignIn}
-                    disabled={authStatus === 'loading'}
-                  >
+              ) : (
+                <div className="auth-panel">
+                  <div className="auth-actions">
+                    <button
+                      type="button"
+                      className="oauth-button auth-cta"
+                      onClick={handleGoogleSignIn}
+                      disabled={authStatus === 'loading'}
+                    >
                       {authStatus === 'loading' ? '起動中...' : 'Googleでログイン'}
-                  </button>
+                    </button>
+                  </div>
+                  {authMessage && <div className="auth-message">{authMessage}</div>}
                 </div>
-                {authMessage && <div className="auth-message">{authMessage}</div>}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </div>
           <div className="chat-thread__intro">
             <div className="hero-badge">
@@ -441,7 +441,9 @@ export function Generate() {
                     <img src={profile.image} alt={profile.name} />
                   </div>
                 )}
-                <div className={`chat-bubble ${message.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'}`}>
+                <div
+                  className={`chat-bubble ${message.role === 'user' ? 'chat-bubble--user' : 'chat-bubble--assistant'}`}
+                >
                   <div className="chat-bubble__meta">
                     <span>{message.role === 'user' ? 'あなた' : profile.name}</span>
                     <span>{formatTime(message.createdAt)}</span>

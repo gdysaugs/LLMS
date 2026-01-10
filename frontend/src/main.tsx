@@ -1,24 +1,18 @@
-﻿import { StrictMode } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
-import App from './App'
+import { Account } from './pages/Account'
 import { Generate } from './pages/Generate'
-import { LlasaTest } from './pages/LlasaTest'
-import { Profile } from './pages/Profile'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* トップページ: 認証・サブスクUIを含む App */}
-        <Route path="/" element={<App />} />
-        {/* ASMR音声生成スタジオ */}
-        <Route path="/generate" element={<Generate />} />
-        {/* LLaSA 3B テスト */}
-        <Route path="/llasa" element={<LlasaTest />} />
-        {/* プロフィール */}
-        <Route path="/profile" element={<Profile />} />
+        <Route path="/" element={<Generate />} />
+        <Route path="/chat" element={<Generate />} />
+        <Route path="/generate" element={<Navigate to="/" replace />} />
+        <Route path="/account" element={<Account />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
